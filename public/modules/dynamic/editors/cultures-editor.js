@@ -108,7 +108,7 @@ function culturesCollectStatistics() {
     if (cells.h[i] < 20) continue;
     const cultureId = cells.culture[i];
     cultures[cultureId].cells += 1;
-    cultures[cultureId].area += cells.area[i];
+    cultures[cultureId].area += cellArea(i);
     cultures[cultureId].rural += cells.pop[i];
     const burgId = cells.burg[i];
     if (burgId) cultures[cultureId].urban += burgs[burgId].population;

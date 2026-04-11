@@ -944,6 +944,12 @@ function getArea(rawArea) {
   return rawArea * distanceScale ** 2;
 }
 
+// Returns the area of a single cell, applying spherical (latitude) correction when enabled
+function cellArea(i) {
+  if (!useSphericalArea || !pack.cells.latCosine) return pack.cells.area[i];
+  return pack.cells.area[i] * pack.cells.latCosine[i];
+}
+
 function confirmationDialog(options) {
   const {
     title = "Confirm action",

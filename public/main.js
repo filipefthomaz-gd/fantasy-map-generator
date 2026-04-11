@@ -239,6 +239,7 @@ const zoom = d3.zoom().scaleExtent([1, 20]).on("zoom", zoomRaf);
 var mapCoordinates = {}; // map coordinates on globe
 let populationRate = +byId("populationRateInput").value;
 let distanceScale = +byId("distanceScaleInput").value;
+let useSphericalArea = false;
 let urbanization = +byId("urbanizationInput").value;
 let urbanDensity = +byId("urbanDensityInput").value;
 
@@ -1166,6 +1167,12 @@ function reGraph() {
   pack.cells.area = createTypedArray({maxValue: UINT16_MAX, length: packCells.i.length}).map((_, cellId) => {
     const area = Math.abs(d3.polygonArea(getPackPolygon(cellId)));
     return Math.min(area, UINT16_MAX);
+  });
+
+  pack.cells.latCosine = new Float32Array(packCells.i.length).map((_, cellId) => {
+    const y = pack.cells.p[cellId][1];
+    const lat = mapCoordinates.latN - (y / graphHeight) * mapCoordinates.latT;
+    return Math.cos((lat * Math.PI) / 180);
   });
 
   TIME && console.timeEnd("reGraph");

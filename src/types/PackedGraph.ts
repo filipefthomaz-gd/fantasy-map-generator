@@ -42,7 +42,8 @@ export interface PackedGraph {
     burg: TypedArray; // cell burg id
     religion: TypedArray; // cell religion id
     state: TypedArray; // cell state id
-    area: TypedArray; // cell area
+    area: TypedArray; // cell area (planar, pixel units)
+    latCosine?: Float32Array; // cos(latitude) per cell, for spherical area correction
     province: TypedArray; // cell province id
     routes: Record<number, Record<number, number>>;
   };

@@ -19,6 +19,7 @@ function editUnits() {
   // add listeners
   byId("distanceUnitInput").on("change", changeDistanceUnit);
   byId("distanceScaleInput").on("change", changeDistanceScale);
+  byId("areaModeInput").on("change", changeAreaMode);
   byId("heightUnit").on("change", changeHeightUnit);
   byId("heightExponentInput").on("input", changeHeightExponent);
   byId("temperatureScale").on("change", changeTemperatureScale);
@@ -53,6 +54,10 @@ function editUnits() {
     distanceScale = +this.value;
     renderScaleBar();
     calculateFriendlyGridSize();
+  }
+
+  function changeAreaMode() {
+    useSphericalArea = this.value === "spherical";
   }
 
   function changeHeightUnit() {
@@ -97,10 +102,13 @@ function editUnits() {
     heightUnit.value = US || UK ? "ft" : "m";
     temperatureScale.value = US ? "°F" : "°C";
     areaUnit.value = "square";
+    areaModeInput.value = "flat";
+    useSphericalArea = false;
     localStorage.removeItem("distanceUnit");
     localStorage.removeItem("heightUnit");
     localStorage.removeItem("temperatureScale");
     localStorage.removeItem("areaUnit");
+    localStorage.removeItem("areaMode");
     calculateFriendlyGridSize();
 
     // height exponent

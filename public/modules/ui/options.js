@@ -549,6 +549,7 @@ function applyStoredOptions() {
 
     if (key === "points") changeCellsDensity(+value);
     if (key === "distanceScale") distanceScale = +value;
+    if (key === "areaMode") useSphericalArea = value === "spherical";
 
     // add saved style presets to options
     if (key.slice(0, 5) === "style") applyOption(stylePreset, key, key.slice(5));

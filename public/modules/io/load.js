@@ -258,6 +258,8 @@ async function parseLoadedData(data, mapVersion) {
       if (settings[24]) urbanDensity = urbanDensityInput.value = +settings[24];
       if (settings[25]) longitudeInput.value = longitudeOutput.value = minmax(settings[25] || 50, 0, 100);
       if (settings[26]) growthRate.value = settings[26];
+      useSphericalArea = settings[27] === "1";
+      if (byId("areaModeInput")) byId("areaModeInput").value = useSphericalArea ? "spherical" : "flat";
     }
 
     {

@@ -86,7 +86,7 @@ function editProvinces() {
       const p = cells.province[i];
       if (!p) continue;
 
-      provinces[p].area += cells.area[i];
+      provinces[p].area += cellArea(i);
       provinces[p].rural += cells.pop[i];
       if (!cells.burg[i]) continue;
       provinces[p].urban += burgs[cells.burg[i]].population;

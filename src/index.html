@@ -5271,6 +5271,14 @@
             <input id="areaUnit" data-stored="areaUnit" type="text" value="square" />
           </div>
 
+          <div data-tip="Flat: pixel-accurate planar area. Spherical: applies cos(latitude) correction — cells near poles shrink proportionally">
+            <label>Area calculation:</label>
+            <select id="areaModeInput" data-stored="areaMode">
+              <option value="flat" selected>Flat (planar)</option>
+              <option value="spherical">Spherical (latitude-corrected)</option>
+            </select>
+          </div>
+
           <div class="unitsHeader">
             <span class="icon-signal"></span>
             <label>Altitude:</label>
