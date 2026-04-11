@@ -118,7 +118,7 @@ function religionsCollectStatistics() {
     if (cells.h[i] < 20) continue;
     const religionId = cells.religion[i];
     religions[religionId].cells += 1;
-    religions[religionId].area += cells.area[i];
+    religions[religionId].area += cellArea(i);
     religions[religionId].rural += cells.pop[i];
     const burgId = cells.burg[i];
     if (burgId) religions[religionId].urban += burgs[burgId].population;

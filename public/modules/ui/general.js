@@ -267,7 +267,7 @@ function updateCellInfo(point, i, g) {
   infoGeozone.innerHTML = getGeozone(getLatitude(y, 4));
 
   infoCell.innerHTML = i;
-  infoArea.innerHTML = cells.area[i] ? si(getArea(cells.area[i])) + " " + getAreaUnit() : "n/a";
+  infoArea.innerHTML = cells.area[i] ? si(getArea(cellArea(i))) + " " + getAreaUnit() : "n/a";
   infoElevation.innerHTML = getElevation(pack.features[f], pack.cells.h[i]);
   infoDepth.innerHTML = getDepth(pack.features[f], point);
   infoTemp.innerHTML = convertTemperature(grid.cells.temp[g]);

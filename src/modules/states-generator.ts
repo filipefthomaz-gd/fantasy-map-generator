@@ -18,6 +18,8 @@ import {
 
 declare global {
   var States: StatesModule;
+  var cellArea: (i: number) => number;
+  var useSphericalArea: boolean;
 }
 
 interface Campaign {
@@ -351,7 +353,7 @@ class StatesModule {
 
       // collect stats
       states[s].cells! += 1;
-      states[s].area! += cells.area[i];
+      states[s].area! += cellArea(i);
       states[s].rural! += cells.pop[i];
       if (cells.burg[i]) {
         states[s].urban! += pack.burgs[cells.burg[i]].population!;

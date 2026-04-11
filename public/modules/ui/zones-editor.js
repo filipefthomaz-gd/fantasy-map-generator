@@ -78,7 +78,7 @@ function editZones() {
       typeToFilterBy === "all" ? pack.zones : pack.zones.filter(zone => zone.type === typeToFilterBy);
 
     const lines = filteredZones.map(({i, name, type, cells, color, hidden}) => {
-      const area = getArea(d3.sum(cells.map(i => pack.cells.area[i])));
+      const area = getArea(d3.sum(cells, i => cellArea(i)));
       const rural = d3.sum(cells.map(i => pack.cells.pop[i])) * populationRate;
       const urban =
         d3.sum(cells.map(i => pack.cells.burg[i]).map(b => pack.burgs[b].population)) * populationRate * urbanization;

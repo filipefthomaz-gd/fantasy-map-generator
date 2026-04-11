@@ -69,7 +69,7 @@ function editBiomes() {
       if (cells.h[i] < 20) continue;
       const b = cells.biome[i];
       biomesData.cells[b] += 1;
-      biomesData.area[b] += cells.area[i];
+      biomesData.area[b] += cellArea(i);
       biomesData.rural[b] += cells.pop[i];
       if (cells.burg[i]) biomesData.urban[b] += pack.burgs[cells.burg[i]].population;
     }
@@ -136,7 +136,7 @@ function editBiomes() {
     body.innerHTML = lines;
 
     // update footer
-    const totalMapArea = getArea(d3.sum(pack.cells.area));
+    const totalMapArea = getArea(d3.sum(pack.cells.i, i => cellArea(i)));
     biomesFooterBiomes.innerHTML = body.querySelectorAll(":scope > div").length;
     biomesFooterCells.innerHTML = pack.cells.h.filter(h => h >= 20).length;
     biomesFooterArea.innerHTML = si(totalArea) + unit;

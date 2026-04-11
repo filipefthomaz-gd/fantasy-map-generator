@@ -66,7 +66,7 @@ const quantizationMap = {
   },
   area: {
     label: "Land area",
-    quantize: cellId => getArea(pack.cells.area[cellId]),
+    quantize: cellId => getArea(cellArea(cellId)),
     aggregate: values => rn(d3.sum(values)),
     formatTicks: value => `${si(value)} ${getAreaUnit()}`,
     stringify: value => `${value.toLocaleString()} ${getAreaUnit()}`,
