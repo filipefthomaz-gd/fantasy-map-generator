@@ -240,6 +240,12 @@ var mapCoordinates = {}; // map coordinates on globe
 let populationRate = +byId("populationRateInput").value;
 let distanceScale = +byId("distanceScaleInput").value;
 let useSphericalArea = false;
+
+// Cache for invokeActiveZooming — invalidated when layers are redrawn
+let _cachedSeaIsland = null;
+let _cachedLabelGroups = null;
+let _cachedEmblemGroups = null;
+let _cachedMarkerElsMap = null;
 let urbanization = +byId("urbanizationInput").value;
 let urbanDensity = +byId("urbanDensityInput").value;
 
@@ -511,36 +517,43 @@ function resetZoom(d = 1000) {
 function invokeActiveZooming() {
   const isOptimized = shapeRendering.value === "optimizeSpeed";
 
-  if (coastline.select("#sea_island").size() && +coastline.select("#sea_island").attr("auto-filter")) {
-    // toggle shade/blur filter for coatline on zoom
+  // sea_island coastline filter — cache the element, query attr once
+  if (_cachedSeaIsland === null) _cachedSeaIsland = byId("sea_island") || undefined;
+  if (_cachedSeaIsland && +_cachedSeaIsland.getAttribute("auto-filter")) {
     const filter = scale > 1.5 && scale <= 2.6 ? null : scale > 2.6 ? "url(#blurFilter)" : "url(#dropShadow)";
-    coastline.select("#sea_island").attr("filter", filter);
+    _cachedSeaIsland.setAttribute("filter", filter ?? "");
+    if (filter === null) _cachedSeaIsland.removeAttribute("filter");
   }
 
-  // rescale labels on zoom
+  // rescale labels on zoom — cache group nodes to avoid repeated selectAll
   if (labels.style("display") !== "none") {
-    labels.selectAll("g").each(function () {
-      if (this.id === "burgLabels") return;
-      const desired = +this.dataset.size;
+    if (!_cachedLabelGroups) {
+      _cachedLabelGroups = Array.from(labels.node().children).filter(el => el.tagName === "g" && el.id !== "burgLabels");
+    }
+    for (const g of _cachedLabelGroups) {
+      const desired = +g.dataset.size;
       const relative = Math.max(rn((desired + desired / scale) / 2, 2), 1);
-      if (rescaleLabels.checked) this.setAttribute("font-size", relative);
+      if (rescaleLabels.checked) g.setAttribute("font-size", relative);
 
       const hidden = hideLabels.checked && (relative * scale < 6 || relative * scale > 60);
-      if (hidden) this.classList.add("hidden");
-      else this.classList.remove("hidden");
-    });
+      if (hidden) g.classList.add("hidden");
+      else g.classList.remove("hidden");
+    }
   }
 
-  // rescale emblems on zoom
+  // rescale emblems on zoom — cache group nodes
   if (emblems.style("display") !== "none") {
-    emblems.selectAll("g").each(function () {
-      const size = this.getAttribute("font-size") * scale;
+    if (!_cachedEmblemGroups) {
+      _cachedEmblemGroups = Array.from(emblems.node().children).filter(el => el.tagName === "g");
+    }
+    for (const g of _cachedEmblemGroups) {
+      const size = +g.getAttribute("font-size") * scale;
       const hidden = hideEmblems.checked && (size < 25 || size > 300);
-      if (hidden) this.classList.add("hidden");
-      else this.classList.remove("hidden");
-      if (!hidden && window.COArenderer && this.children.length && !this.children[0].getAttribute("href"))
-        renderGroupCOAs(this);
-    });
+      if (hidden) g.classList.add("hidden");
+      else g.classList.remove("hidden");
+      if (!hidden && window.COArenderer && g.children.length && !g.children[0].getAttribute("href"))
+        renderGroupCOAs(g);
+    }
   }
 
   // change states halo width
@@ -550,19 +563,28 @@ function invokeActiveZooming() {
     statesHalo.attr("stroke-width", haloSize).style("display", haloSize > 0.1 ? "block" : "none");
   }
 
-  // rescale map markers
-  +markers.attr("rescale") &&
-    pack.markers?.forEach(marker => {
+  // rescale map markers — cache marker elements in a Map to avoid byId on every frame
+  if (+markers.attr("rescale") && pack.markers?.length) {
+    if (!_cachedMarkerElsMap) {
+      _cachedMarkerElsMap = new Map();
+      for (const {i} of pack.markers) {
+        const el = byId(`marker${i}`);
+        if (el) _cachedMarkerElsMap.set(i, el);
+      }
+    }
+    for (const marker of pack.markers) {
       const {i, x, y, size = 30, hidden} = marker;
-      const el = !hidden && byId(`marker${i}`);
-      if (!el) return;
+      if (hidden) continue;
+      const el = _cachedMarkerElsMap.get(i);
+      if (!el) continue;
 
       const zoomedSize = Math.max(rn(size / 5 + 24 / scale, 2), 1);
       el.setAttribute("width", zoomedSize);
       el.setAttribute("height", zoomedSize);
       el.setAttribute("x", rn(x - zoomedSize / 2, 1));
       el.setAttribute("y", rn(y - zoomedSize, 1));
-    });
+    }
+  }
 
   // rescale rulers to have always the same size
   if (ruler.style("display") !== "none") {
@@ -624,6 +646,11 @@ async function generate(options) {
     const timeStart = performance.now();
     const {seed: precreatedSeed, graph: precreatedGraph} = options || {};
 
+    // Reset zoom caches — new map means new DOM nodes
+    _cachedSeaIsland = null;
+    _cachedLabelGroups = null;
+    _cachedEmblemGroups = null;
+    _cachedMarkerElsMap = null;
     invokeActiveZooming();
     setSeed(precreatedSeed);
     INFO && console.group("Generated Map " + seed);

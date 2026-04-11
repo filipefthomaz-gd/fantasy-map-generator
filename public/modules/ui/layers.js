@@ -824,6 +824,7 @@ function toggleMilitary(event) {
 
 function toggleMarkers(event) {
   if (!layerIsOn("toggleMarkers")) {
+    _cachedMarkerElsMap = null; // invalidate zoom cache
     turnButtonOn("toggleMarkers");
     drawMarkers();
     if (event && isCtrlClick(event)) editStyle("markers");
@@ -849,6 +850,7 @@ function toggleLabels(event) {
 }
 
 function drawLabels() {
+  _cachedLabelGroups = null; // invalidate zoom cache
   drawStateLabels();
   drawBurgLabels();
   invokeActiveZooming();
@@ -920,6 +922,7 @@ function drawZone({i, cells, type, color}) {
 
 function toggleEmblems(event) {
   if (!layerIsOn("toggleEmblems")) {
+    _cachedEmblemGroups = null; // invalidate zoom cache
     turnButtonOn("toggleEmblems");
     if (!emblems.selectAll("use").size()) drawEmblems();
     $("#emblems").fadeIn();

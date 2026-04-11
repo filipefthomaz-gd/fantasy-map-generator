@@ -305,6 +305,11 @@ async function parseLoadedData(data, mapVersion) {
     {
       svg.remove();
       document.body.insertAdjacentHTML("afterbegin", data[5]);
+      // Reset zoom caches — loaded SVG has new DOM nodes
+      _cachedSeaIsland = null;
+      _cachedLabelGroups = null;
+      _cachedEmblemGroups = null;
+      _cachedMarkerElsMap = null;
     }
 
     {
