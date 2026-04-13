@@ -358,6 +358,7 @@ async function parseLoadedData(data, mapVersion) {
       anchors = icons.select("#anchors");
       armies = viewbox.select("#armies");
       markers = viewbox.select("#markers");
+      resourcesLayer = viewbox.select("#resources");
       ruler = viewbox.select("#ruler");
       fogging = viewbox.select("#fogging");
       debug = viewbox.select("#debug");
@@ -371,6 +372,9 @@ async function parseLoadedData(data, mapVersion) {
       }
       if (!emblems.size()) {
         emblems = viewbox.insert("g", "#labels").attr("id", "emblems").style("display", "none");
+      }
+      if (!resourcesLayer.size()) {
+        resourcesLayer = viewbox.insert("g", "#cells").attr("id", "resources").style("display", "none");
       }
     }
 
@@ -414,6 +418,12 @@ async function parseLoadedData(data, mapVersion) {
       // data[28] had deprecated cells.crossroad
       pack.cells.routes = data[36] ? JSON.parse(data[36]) : {};
       pack.ice = data[39] ? JSON.parse(data[39]) : [];
+      mapTimeline = data[40] ? JSON.parse(data[40]) : [];
+      if (data[41]) {
+        pack.cells.resource = Uint8Array.from(data[41].split(","));
+      } else {
+        assignResources(); // compute from current map data for older saves
+      }
 
       if (data[31]) {
         const namesDL = data[31].split("/");

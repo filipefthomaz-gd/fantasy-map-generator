@@ -17,6 +17,7 @@ toolsContent.addEventListener("click", function (event) {
   else if (button === "editReligions") editReligions();
   else if (button === "editEmblemButton") openEmblemEditor();
   else if (button === "editNamesBaseButton") editNamesbase();
+  else if (button === "openTimelineButton") openTimeline();
   else if (button === "editUnitsButton") editUnits();
   else if (button === "editNotesButton") editNotes();
   else if (button === "editZonesButton") editZones();
@@ -150,7 +151,7 @@ function recalculatePopulation() {
     b.population = rn(b.population * gauss(2, 3, 0.6, 20, 3), 3);
   });
 
-  layerIsOn("togglePopulation") ? drawPopulation() : togglePopulation();
+  if (layerIsOn("togglePopulation")) drawPopulation();
 }
 
 function regenerateStates() {

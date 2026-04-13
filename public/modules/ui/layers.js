@@ -209,6 +209,7 @@ function drawLayers() {
   if (layerIsOn("toggleBurgIcons")) drawBurgIcons();
   if (layerIsOn("toggleMilitary")) drawMilitary();
   if (layerIsOn("toggleMarkers")) drawMarkers();
+  if (layerIsOn("toggleResources")) drawResources();
   if (layerIsOn("toggleRulers")) rulers.draw();
   // scale bar
   // vignette
@@ -880,6 +881,54 @@ function toggleRulers(event) {
     ruler.selectAll("*").remove();
     ruler.style("display", "none");
   }
+}
+
+function toggleResources(event) {
+  if (!layerIsOn("toggleResources")) {
+    turnButtonOn("toggleResources");
+    assignResources(); // always recompute — acts as regenerate when map changes
+    drawResources();
+    if (event && isCtrlClick(event)) editStyle("resources");
+  } else {
+    if (event && isCtrlClick(event)) return editStyle("resources");
+    byId("resources").innerHTML = "";
+    resourcesLayer.style("display", "none");
+    turnButtonOff("toggleResources");
+  }
+}
+
+function drawResources() {
+  TIME && console.time("drawResources");
+
+  const {cells} = pack;
+  if (!cells.resource) return;
+
+  // Colored cell fills — same pattern as drawBiomes / drawCultures
+  const fillPaths = [];
+  const isolines = getIsolines(pack, cellId => cells.resource[cellId], {fill: true, waterGap: true});
+  Object.entries(isolines).forEach(([index, {fill, waterGap}]) => {
+    const res = RESOURCES[+index];
+    if (!res) return; // index 0 = no resource, skip
+    fillPaths.push(getGappedFillPaths("resource", fill, waterGap, res.color, index));
+  });
+
+  // Emoji icons at sampled centroids so each colored region is labelled
+  const resourceCells = cells.i.filter(i => cells.resource[i] > 0);
+  const targetIcons = 600;
+  const skip = Math.max(1, Math.ceil(resourceCells.length / targetIcons));
+  const iconTexts = resourceCells
+    .filter((_, idx) => idx % skip === 0)
+    .map(i => `<text x="${cells.p[i][0]}" y="${cells.p[i][1]}" text-anchor="middle" dominant-baseline="central" font-size="12px">${RESOURCES[cells.resource[i]].icon}</text>`)
+    .join("");
+
+  // Fills are masked to land; icons sit outside the mask so they always render.
+  // Explicit emoji font stack ensures glyphs render in SVG across all browsers.
+  byId("resources").innerHTML =
+    `<g mask="url(#land)">${fillPaths.join("")}</g>` +
+    `<g id="resourceIcons" font-family="'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji','Segoe UI Symbol',sans-serif" pointer-events="none">${iconTexts}</g>`;
+  resourcesLayer.style("display", "block");
+
+  TIME && console.timeEnd("drawResources");
 }
 
 function toggleScaleBar(event) {

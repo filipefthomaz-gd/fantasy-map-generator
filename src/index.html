@@ -698,6 +698,13 @@
               Mar<u>k</u>ers
             </li>
             <li
+              id="toggleResources"
+              data-tip="Resources: click to toggle resource icons (crops, minerals, fish…). Ctrl + click to edit layer style"
+              onclick="toggleResources(event)"
+            >
+              Resources
+            </li>
+            <li
               id="toggleRulers"
               data-tip="Rulers: click to toggle, drag to move, click on label to delete. Ctrl + click to edit layer style"
               data-shortcut="= (equal sign)"
@@ -2152,6 +2159,7 @@
             <button id="editStatesButton" data-tip="Click to open States Editor" data-shortcut="Shift + S">
               States
             </button>
+            <button id="openTimelineButton" data-tip="Click to open World Timeline" data-shortcut="Shift + L">Timeline</button>
             <button id="editUnitsButton" data-tip="Click to open Units Editor" data-shortcut="Shift + Q">Units</button>
             <button id="editZonesButton" data-tip="Click to open Zones Editor" data-shortcut="Shift + Z">Zones</button>
           </div>
@@ -5009,6 +5017,24 @@
             <select id="zonesFilterType"></select>
           </div>
         </div>
+      </div>
+
+      <div id="timelineEditor" class="dialog stable" style="display: none">
+        <div style="display:flex;gap:0.4em;align-items:center;padding-bottom:0.5em;border-bottom:1px solid #555;margin-bottom:0.4em;flex-wrap:wrap">
+          <label style="white-space:nowrap;flex-shrink:0">
+            Year&nbsp;<input id="timelineYear" type="number" value="0" style="width:5em" />
+          </label>
+          <label style="flex:1;min-width:8em;white-space:nowrap">
+            Label&nbsp;<input id="timelineLabel" type="text" placeholder="e.g. Founding Age" style="width:calc(100% - 3.5em)" />
+          </label>
+          <button id="timelineSave" data-tip="Save current map state as a timeline snapshot">Save Snapshot</button>
+        </div>
+        <div style="display:flex;gap:0.4em;align-items:center;padding-bottom:0.5em;border-bottom:1px solid #555;margin-bottom:0.4em">
+          <label style="flex:1;white-space:nowrap">
+            Note&nbsp;<input id="timelineNote" type="text" placeholder="Optional description of this era..." style="width:calc(100% - 3.5em)" />
+          </label>
+        </div>
+        <div id="timelineList" style="max-height:22em;overflow-y:auto;min-width:26em"></div>
       </div>
 
       <div id="notesEditor" class="dialog stable" style="display: none">
@@ -8551,6 +8577,7 @@
     <script defer src="libs/polylabel.min.js?v1.105.0"></script>
     <script defer src="libs/simplify.js?v1.105.6"></script>
     <script defer src="modules/ui/layers.js?v=1.111.0"></script>
+    <script defer src="modules/resources.js?v=1.0.0"></script>
     <script defer src="modules/ui/measurers.js?v=1.99.00"></script>
     <script defer src="modules/ui/style-presets.js?v=1.100.00"></script>
     <script defer src="modules/ui/general.js?v=1.113.1"></script>
@@ -8580,6 +8607,7 @@
     <script defer src="modules/ui/burg-group-editor.js?v=1.109.5"></script>
     <script defer src="modules/ui/burg-editor.js?v=1.114.2"></script>
     <script defer src="modules/ui/units-editor.js?v=1.108.12"></script>
+    <script defer src="modules/ui/timeline.js?v=1.0.0"></script>
     <script defer src="modules/ui/notes-editor.js?v=1.107.3"></script>
     <script defer src="modules/ui/ai-generator.js?v=1.108.8"></script>
     <script defer src="modules/ui/diplomacy-editor.js?v=1.99.00"></script>

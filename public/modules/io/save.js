@@ -158,7 +158,9 @@ function prepareMapData() {
     cellRoutes,
     routes,
     zones,
-    ice
+    ice,
+    JSON.stringify(mapTimeline),
+    pack.cells.resource ? Array.from(pack.cells.resource).join(",") : ""
   ].join("\r\n");
   return mapData;
 }

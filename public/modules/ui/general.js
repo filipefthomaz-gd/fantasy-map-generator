@@ -216,6 +216,7 @@ function showMapTooltip(point, e, i, g) {
 
   // covering elements
   if (layerIsOn("togglePrecipitation") && land) tip("Annual Precipitation: " + getFriendlyPrecipitation(i));
+  else if (layerIsOn("toggleResources") && pack.cells.resource?.[i]) tip("Resource: " + RESOURCES[pack.cells.resource[i]].name);
   else if (layerIsOn("togglePopulation")) tip(getPopulationTip(i));
   else if (layerIsOn("toggleTemperature")) tip("Temperature: " + convertTemperature(grid.cells.temp[g]));
   else if (layerIsOn("toggleBiomes") && pack.cells.biome[i]) {
