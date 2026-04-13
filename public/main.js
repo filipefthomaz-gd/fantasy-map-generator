@@ -45,6 +45,7 @@ let landmass = viewbox.append("g").attr("id", "landmass");
 let texture = viewbox.append("g").attr("id", "texture");
 let terrs = viewbox.append("g").attr("id", "terrs");
 let biomes = viewbox.append("g").attr("id", "biomes");
+let resourcesLayer = viewbox.append("g").attr("id", "resources").style("display", "none");
 let cells = viewbox.append("g").attr("id", "cells");
 let gridOverlay = viewbox.append("g").attr("id", "gridOverlay");
 let coordinates = viewbox.append("g").attr("id", "coordinates");
@@ -240,6 +241,7 @@ var mapCoordinates = {}; // map coordinates on globe
 let populationRate = +byId("populationRateInput").value;
 let distanceScale = +byId("distanceScaleInput").value;
 let useSphericalArea = false;
+let mapTimeline = []; // world history snapshots
 
 // Cache for invokeActiveZooming — invalidated when layers are redrawn
 let _cachedSeaIsland = null;
@@ -651,6 +653,7 @@ async function generate(options) {
     _cachedLabelGroups = null;
     _cachedEmblemGroups = null;
     _cachedMarkerElsMap = null;
+    mapTimeline = [];
     invokeActiveZooming();
     setSeed(precreatedSeed);
     INFO && console.group("Generated Map " + seed);
@@ -704,6 +707,7 @@ async function generate(options) {
 
     Military.generate();
     Markers.generate();
+    assignResources();
     Zones.generate();
 
     drawScaleBar(scaleBar, scale);

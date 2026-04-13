@@ -46,6 +46,7 @@ function handleKeyup(event) {
   else if (shift && code === "KeyR") editReligions();
   else if (shift && code === "KeyY") openEmblemEditor();
   else if (shift && code === "KeyQ") editUnits();
+  else if (shift && code === "KeyL") openTimeline();
   else if (shift && code === "KeyO") editNotes();
   else if (shift && code === "KeyA") overviewCharts();
   else if (shift && code === "KeyT") overviewBurgs();
