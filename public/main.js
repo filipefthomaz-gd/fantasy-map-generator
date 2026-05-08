@@ -40,10 +40,10 @@ let legend = svg.append("g").attr("id", "legend");
 let ocean = viewbox.append("g").attr("id", "ocean");
 let oceanLayers = ocean.append("g").attr("id", "oceanLayers");
 let oceanPattern = ocean.append("g").attr("id", "oceanPattern");
-let lakes = viewbox.append("g").attr("id", "lakes");
 let landmass = viewbox.append("g").attr("id", "landmass");
 let texture = viewbox.append("g").attr("id", "texture");
 let terrs = viewbox.append("g").attr("id", "terrs");
+let lakes = viewbox.append("g").attr("id", "lakes");
 let biomes = viewbox.append("g").attr("id", "biomes");
 let resourcesLayer = viewbox.append("g").attr("id", "resources").style("display", "none");
 let cells = viewbox.append("g").attr("id", "cells");
@@ -212,9 +212,9 @@ function zoomRaf() {
     }
 
     if (customization === 1) {
-      const canvas = byId("canvas");
+      const canvas = ensureEl("canvas");
       if (canvas && canvas.style.opacity !== "0") {
-        const img = byId("imageToConvert");
+        const img = ensureEl("imageToConvert");
         if (img) {
           const ctx = canvas.getContext("2d");
           ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -225,22 +225,22 @@ function zoomRaf() {
     }
 
     if (didScaleChange) {
-      postZoom();
+      invokeActiveZooming();
+      drawScaleBar(scaleBar, scale);
+      fitScaleBar(scaleBar, svgWidth, svgHeight);
     }
-  })
-}
 
-const postZoom = () => {
-  invokeActiveZooming();
-  drawScaleBar(scaleBar, scale);
-  fitScaleBar(scaleBar, svgWidth, svgHeight);
+    if (didPositionChange || didScaleChange) {
+      window.updateMinimap && updateMinimap();
+    }
+  });
 }
 
 const zoom = d3.zoom().scaleExtent([1, 20]).on("zoom", zoomRaf);
 
 var mapCoordinates = {}; // map coordinates on globe
-let populationRate = +byId("populationRateInput").value;
-let distanceScale = +byId("distanceScaleInput").value;
+let populationRate = +ensureEl("populationRateInput").value;
+let distanceScale = +ensureEl("distanceScaleInput").value;
 let useSphericalArea = false;
 let mapTimeline = []; // world history snapshots
 
@@ -249,8 +249,8 @@ let _cachedSeaIsland = null;
 let _cachedLabelGroups = null;
 let _cachedEmblemGroups = null;
 let _cachedMarkerElsMap = null;
-let urbanization = +byId("urbanizationInput").value;
-let urbanDensity = +byId("urbanDensityInput").value;
+let urbanization = +ensureEl("urbanizationInput").value;
+let urbanDensity = +ensureEl("urbanDensityInput").value;
 
 applyStoredOptions();
 
@@ -300,6 +300,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   restoreDefaultEvents(); // apply default viewbox events
   initiateAutosave();
+  initTourPromptButton();
 });
 
 function hideLoading() {
@@ -341,7 +342,7 @@ async function checkLoadParameters() {
   }
 
   // check if there is a map saved to indexedDB
-  if (byId("onloadBehavior").value === "lastSaved") {
+  if (ensureEl("onloadBehavior").value === "lastSaved") {
     try {
       const blob = await ldb.get("lastMap");
       if (blob) {
@@ -418,17 +419,16 @@ function focusOn() {
 
 let isAssistantLoaded = false;
 function toggleAssistant() {
-  const assistantContainer = byId("chat-widget-container");
-  const showAssistant = byId("azgaarAssistant").value === "show";
-
+  const showAssistant = document.getElementById("azgaarAssistant")?.value === "show";
   if (showAssistant) {
     if (isAssistantLoaded) {
-      assistantContainer.style.display = "block";
+      const assistantContainer = document.getElementById("chat-widget-container");
+      if (assistantContainer) assistantContainer.style.display = "block";
     } else {
       import("./libs/openwidget.min.js").then(() => {
         isAssistantLoaded = true;
         setTimeout(() => {
-          const bubble = byId("chat-widget-minimized");
+          const bubble = document.getElementById("chat-widget-minimized");
           if (bubble) {
             bubble.dataset.tip = "Click to open the Assistant";
             bubble.on("mouseover", showDataTip);
@@ -437,8 +437,25 @@ function toggleAssistant() {
       });
     }
   } else if (isAssistantLoaded) {
-    assistantContainer.style.display = "none";
+    const assistantContainer = document.getElementById("chat-widget-container");
+    if (assistantContainer) assistantContainer.style.display = "none";
   }
+}
+
+function initTourPromptButton() {
+  const MAX_SHOWS = 3;
+  const STORAGE_KEY = "fmg-tour-prompt-count";
+  const btn = document.getElementById("tourPromptButton");
+  if (!btn) return;
+
+  const count = parseInt(localStorage.getItem(STORAGE_KEY) || "0", 10);
+  if (count >= MAX_SHOWS) return;
+
+  localStorage.setItem(STORAGE_KEY, count + 1);
+  btn.style.display = "flex";
+  btn.addEventListener("click", () => {
+    UITour.start();
+  });
 }
 
 // find burg for MFCG and focus on it
@@ -601,18 +618,18 @@ void (function addDragToUpload() {
   document.addEventListener("dragover", function (e) {
     e.stopPropagation();
     e.preventDefault();
-    byId("mapOverlay").style.display = null;
+    ensureEl("mapOverlay").style.display = null;
   });
 
   document.addEventListener("dragleave", function (e) {
-    byId("mapOverlay").style.display = "none";
+    ensureEl("mapOverlay").style.display = "none";
   });
 
   document.addEventListener("drop", function (e) {
     e.stopPropagation();
     e.preventDefault();
 
-    const overlay = byId("mapOverlay");
+    const overlay = ensureEl("mapOverlay");
     overlay.style.display = "none";
     if (e.dataTransfer.items == null || e.dataTransfer.items.length !== 1) return; // no files or more than one
     const file = e.dataTransfer.items[0].getAsFile();
@@ -756,13 +773,13 @@ function setSeed(precreatedSeed) {
     seed = precreatedSeed;
   }
 
-  byId("optionsSeed").value = seed;
+  ensureEl("optionsSeed").value = seed;
   Math.random = aleaPRNG(seed);
 }
 
 function addLakesInDeepDepressions() {
   TIME && console.time("addLakesInDeepDepressions");
-  const elevationLimit = +byId("lakeElevationLimitOutput").value;
+  const elevationLimit = +ensureEl("lakeElevationLimitOutput").value;
   if (elevationLimit === 80) return;
 
   const {cells, features} = grid;
@@ -822,7 +839,7 @@ function addLakesInDeepDepressions() {
 
 // near sea lakes usually get a lot of water inflow, most of them should break threshold and flow out to sea (see Ancylus Lake)
 function openNearSeaLakes() {
-  if (byId("templateInput").value === "Atoll") return; // no need for Atolls
+  if (ensureEl("templateInput").value === "Atoll") return; // no need for Atolls
 
   const cells = grid.cells;
   const features = grid.features;
@@ -872,7 +889,7 @@ function defineMapSize() {
   if (randomize || !locked("longitude")) longitudeOutput.value = longitudeInput.value = longitude;
 
   function getSizeAndLatitude() {
-    const template = byId("templateInput").value; // heightmap template
+    const template = ensureEl("templateInput").value; // heightmap template
 
     if (template === "africa-centric") return [45, 53, 38];
     if (template === "arabia") return [20, 35, 35];
@@ -924,9 +941,9 @@ function defineMapSize() {
 
 // calculate map position on globe
 function calculateMapCoordinates() {
-  const sizeFraction = +byId("mapSizeOutput").value / 100;
-  const latShift = +byId("latitudeOutput").value / 100;
-  const lonShift = +byId("longitudeOutput").value / 100;
+  const sizeFraction = +ensureEl("mapSizeOutput").value / 100;
+  const latShift = +ensureEl("latitudeOutput").value / 100;
+  const lonShift = +ensureEl("longitudeOutput").value / 100;
 
   const latT = rn(sizeFraction * 180, 1);
   const latN = rn(90 - (180 - latT) * latShift, 1);
@@ -1268,7 +1285,7 @@ function rankCells() {
 
 // show map stats on generation complete
 function showStatistics() {
-  const heightmap = byId("templateInput").value;
+  const heightmap = ensureEl("templateInput").value;
   const isTemplate = heightmap in heightmapTemplates;
   const heightmapType = isTemplate ? "template" : "precreated";
   const isRandomTemplate = isTemplate && !locked("template") ? "random " : "";
@@ -1299,7 +1316,7 @@ function showStatistics() {
 const regenerateMap = debounce(async function (options) {
   WARN && console.warn("Generate new random map");
 
-  const cellsDesired = +byId("pointsInput").dataset.cells;
+  const cellsDesired = +ensureEl("pointsInput").dataset.cells;
   const shouldShowLoading = cellsDesired > 10000;
   shouldShowLoading && showLoading();
 
@@ -1322,10 +1339,10 @@ function undraw() {
   viewbox
     .selectAll("path, circle, polygon, line, text, use, #texture > image, #zones > g, #armies > g, #ruler > g")
     .remove();
-  byId("deftemp")
+  ensureEl("deftemp")
     .querySelectorAll("path, clipPath, svg")
     .forEach(el => el.remove());
-  byId("coas").innerHTML = ""; // remove auto-generated emblems
+  ensureEl("coas").innerHTML = ""; // remove auto-generated emblems
   notes = [];
   unfog();
 }
