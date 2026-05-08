@@ -359,6 +359,7 @@ async function parseLoadedData(data, mapVersion) {
       armies = viewbox.select("#armies");
       markers = viewbox.select("#markers");
       resourcesLayer = viewbox.select("#resources");
+      climate = viewbox.select("#climate");
       ruler = viewbox.select("#ruler");
       fogging = viewbox.select("#fogging");
       debug = viewbox.select("#debug");
@@ -375,6 +376,9 @@ async function parseLoadedData(data, mapVersion) {
       }
       if (!resourcesLayer.size()) {
         resourcesLayer = viewbox.insert("g", "#cells").attr("id", "resources").style("display", "none");
+      }
+      if (!climate.size()) {
+        climate = viewbox.insert("g", "#population").attr("id", "climate").style("display", "none");
       }
     }
 

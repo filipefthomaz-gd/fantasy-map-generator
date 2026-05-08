@@ -54,14 +54,7 @@ function assignResources() {
     const hasRiver = cells.r[i] > 0;
     const flux     = cells.fl[i];
     const suit     = cells.s[i];
-    const hasBurg  = cells.burg[i] > 0;
     const r        = cellRand(i);
-
-    // ── Urbanization: burg cells become Trade centers ──────────────────────
-    if (hasBurg) {
-      cells.resource[i] = 21; // Trade
-      continue;
-    }
 
     // ── High peaks: gems, gold, minerals ───────────────────────────────────
     if (h > 75) {
@@ -73,7 +66,7 @@ function assignResources() {
     // ── Mid-highland: iron in forested zones, minerals elsewhere ───────────
     if (h > 55) {
       const forested = biome === 6 || biome === 8 || biome === 9;
-      cells.resource[i] = (forested && r < 0.45) ? 15 : 14; // Iron or Minerals
+      cells.resource[i] = (forested && r < 0.45) ? 15 : 14;
       continue;
     }
 
@@ -89,92 +82,101 @@ function assignResources() {
     }
 
     // ── Rivers: freshwater fishing at low-elevation mouths ─────────────────
-    if (hasRiver && h <= 26 && flux > 80) {
-      cells.resource[i] = 6; continue; // Fish
+    // Skip in agricultural biomes — large rivers there boost crops, not fishing.
+    const isAgriBiome = biome === 3 || biome === 4 || biome === 6;
+    if (hasRiver && h <= 26 && flux > 80 && !(isAgriBiome && suit >= 5)) {
+      cells.resource[i] = 6; continue;
     }
 
-    // ── Deserts: nothing further inland ───────────────────────────────────
+    // ── Deserts: salt flats, dried riverbeds, exposed mineral seams ────────
     if (biome === 1 || biome === 2) {
-      // Occasional salt deposits in dried lakebeds
-      if (r < 0.06) cells.resource[i] = 13;
+      if (r < 0.12)      cells.resource[i] = 13; // Salt (salt flats, dry lake beds)
+      else if (r < 0.20) cells.resource[i] = 14; // Minerals (exposed rock seams)
       continue;
     }
 
     // ── Biome-driven inland rules ──────────────────────────────────────────
 
     if (biome === 3) {
-      // Savanna — hot grassland/scrubland
-      if (temp > 22) {
-        // Hot savanna: elephants, horses, sparse crops where moisture allows
-        if (r < 0.07)  { cells.resource[i] = 12; continue; } // Ivory (rare)
-        if (prec >= 28 && r < 0.4) { cells.resource[i] = 1; continue; } // Crops
-        cells.resource[i] = r < 0.6 ? 10 : 9; // Horses or Cattle
+      // Savanna — also low-precip by definition; use suit like grassland
+      if (r < 0.07) { cells.resource[i] = 12; continue; } // Ivory (rare, any savanna)
+      if (suit >= 8 || hasRiver) {
+        // Fertile savanna / river margins: sorghum, millet, yam
+        cells.resource[i] = r < 0.38 ? 1 : (r < 0.68 ? 9 : 10); // Crops, Cattle, Horses
+      } else if (suit >= 3) {
+        // Typical savanna: mostly pastoral, some crops
+        cells.resource[i] = r < 0.18 ? 1 : (r < 0.55 ? 9 : 10); // Crops, Cattle, Horses
       } else {
-        // Cooler savanna: cattle & crops where rain suffices; horses in dry corners
-        if (prec >= 30 || flux > 40) {
-          cells.resource[i] = r < 0.35 ? 1 : (r < 0.65 ? 9 : 10); // Crops, Cattle, Horses
-        } else {
-          cells.resource[i] = r < 0.65 ? 10 : 9; // Horses or Cattle (arid)
-        }
+        // Harsh dry savanna: pastoral only
+        cells.resource[i] = r < 0.55 ? 10 : 9; // Horses or Cattle
       }
       continue;
     }
 
     if (biome === 4) {
-      // Grassland/Steppe
-      if (suit > 40 || prec >= 40) {
-        // Fertile plains: crops dominate, cattle secondary
-        cells.resource[i] = r < 0.22 ? 9 : 1; // 22% Cattle, 78% Crops
-      } else if (prec >= 22) {
-        if (h > 40) {
-          // Upland meadow: wool and horses
-          cells.resource[i] = r < 0.55 ? 11 : 10; // Wool or Horses
-        } else {
-          // Mixed productive steppe
-          cells.resource[i] = r < 0.40 ? 1 : (r < 0.65 ? 9 : 10); // Crops, Cattle, Horses
-        }
+      // Grassland/Steppe — historically among the world's most productive grain regions.
+      // Grassland is a LOW-precip biome by definition, so prec is a poor proxy for
+      // agricultural potential here. Use suit (habitability score) instead.
+      if (suit >= 10 || hasRiver) {
+        // Well-watered plains / river valleys: grain farming dominates
+        if (r < 0.52)      cells.resource[i] = 1;  // Crops
+        else if (r < 0.78) cells.resource[i] = 9;  // Cattle
+        else               cells.resource[i] = 8;  // Game
+      } else if (suit >= 3) {
+        // Typical steppe: mixed pastoral with some crops
+        if (r < 0.30)      cells.resource[i] = 1;  // Crops
+        else if (r < 0.55) cells.resource[i] = 9;  // Cattle
+        else if (r < 0.78) cells.resource[i] = 11; // Wool
+        else               cells.resource[i] = 10; // Horses
       } else {
-        // Arid steppe: horses dominant, some wool
-        cells.resource[i] = r < 0.78 ? 10 : 11; // Horses or Wool
+        // Harsh/arid steppe: pastoral only
+        if (r < 0.40)      cells.resource[i] = 9;  // Cattle
+        else if (r < 0.72) cells.resource[i] = 10; // Horses
+        else               cells.resource[i] = 11; // Wool
       }
       continue;
     }
 
     if (biome === 5) {
-      // Tropical seasonal forest — warm, seasonally dry
-      if (r < 0.06)  { cells.resource[i] = 12; continue; } // Ivory (rare)
-      if (r < 0.32)  { cells.resource[i] = 18; continue; } // Spices
-      if (r < 0.55)  { cells.resource[i] = 2;  continue; } // Orchards
-      if (r < 0.75)  { cells.resource[i] = 20; continue; } // Herbs
-      cells.resource[i] = 5; // Timber
+      // Tropical seasonal forest — rice, cassava, yam grow at lower elevations
+      if (r < 0.06) { cells.resource[i] = 12; continue; } // Ivory
+      if (h <= 32 && suit >= 5) {
+        // Lowland clearings: tropical crops alongside spices and orchards
+        cells.resource[i] = r < 0.35 ? 1 : (r < 0.60 ? 18 : 2); // Crops, Spices, Orchards
+      } else {
+        if (r < 0.28)  { cells.resource[i] = 18; continue; } // Spices
+        if (r < 0.50)  { cells.resource[i] = 2;  continue; } // Orchards
+        if (r < 0.72)  { cells.resource[i] = 20; continue; } // Herbs
+        cells.resource[i] = 5;                                // Timber
+      }
       continue;
     }
 
     if (biome === 6) {
       // Temperate deciduous forest
-      if (h <= 35 && (hasRiver || prec >= 40)) {
-        // River valleys: cultivated and pastoral
+      if (h <= 35) {
+        // Lowland temperate forest: partially cleared for farming
         const pick = r * 10 | 0;
-        if (pick < 6)      cells.resource[i] = 1;  // Crops (60%)
+        if (pick < 4)      cells.resource[i] = 1;  // Crops (40%)
+        else if (pick < 6) cells.resource[i] = 5;  // Timber (20%)
         else if (pick < 8) cells.resource[i] = 9;  // Cattle (20%)
         else if (pick < 9) cells.resource[i] = 19; // Honey (10%)
-        else               cells.resource[i] = 2;  // Orchards (10%) — warm valley
+        else               cells.resource[i] = 2;  // Orchards (10%)
       } else if (h > 42 && temp > 11 && prec < 65) {
-        // Warm hillsides: vineyards, otherwise timber or wool
-        cells.resource[i] = r < 0.28 ? 3 : (r < 0.65 ? 5 : 11); // Vineyards, Timber, Wool
+        // Warm hillsides: vineyards, timber, wool
+        cells.resource[i] = r < 0.28 ? 3 : (r < 0.65 ? 5 : 11);
       } else {
-        // Mixed forest interior: timber, game, honey, herbs
+        // Forest interior: timber, game, honey
         const pick = r * 10 | 0;
         if (pick < 5)      cells.resource[i] = 5;  // Timber (50%)
         else if (pick < 7) cells.resource[i] = 8;  // Game (20%)
-        else if (pick < 9) cells.resource[i] = 19; // Honey (20%)
-        else               cells.resource[i] = 20; // Herbs (10%)
+        else               cells.resource[i] = 19; // Honey (30%) — merged herbs into honey
       }
       continue;
     }
 
     if (biome === 7) {
-      // Tropical rainforest — dense, wet
+      // Tropical rainforest
       const pick = r * 10 | 0;
       if (pick < 4)      cells.resource[i] = 18; // Spices (40%)
       else if (pick < 7) cells.resource[i] = 20; // Herbs (30%)
@@ -185,10 +187,8 @@ function assignResources() {
     if (biome === 8) {
       // Temperate rainforest
       if (h <= 30 && temp > 10) {
-        // Warm coastal lowlands: orchards, some timber
         cells.resource[i] = r < 0.45 ? 2 : 5; // Orchards or Timber
       } else {
-        // Dense upland rainforest: timber and game
         cells.resource[i] = r < 0.88 ? 5 : 8; // Timber or Game
       }
       continue;
@@ -197,10 +197,8 @@ function assignResources() {
     if (biome === 9) {
       // Taiga/Boreal forest
       if (h > 50) {
-        // High taiga: game and berries
         cells.resource[i] = r < 0.55 ? 8 : 4; // Game or Berries
       } else {
-        // Low taiga: timber backbone with scattered wildlife resources
         const pick = r * 10 | 0;
         if (pick < 5)      cells.resource[i] = 5;  // Timber (50%)
         else if (pick < 7) cells.resource[i] = 8;  // Game (20%)
@@ -211,13 +209,13 @@ function assignResources() {
     }
 
     if (biome === 10) {
-      // Tundra — harsh, sparse resources
+      // Tundra
       cells.resource[i] = r < 0.55 ? 8 : (r < 0.85 ? 4 : 11); // Game, Berries, Wool
       continue;
     }
 
     if (biome === 12) {
-      // Wetland — rich in fish, herbs, and honey
+      // Wetland
       const pick = r * 10 | 0;
       if (pick < 5)      cells.resource[i] = 6;  // Fish (50%)
       else if (pick < 7) cells.resource[i] = 20; // Herbs (20%)
@@ -225,6 +223,55 @@ function assignResources() {
       else               cells.resource[i] = 4;  // Berries (10%)
       continue;
     }
+  }
+
+  // ── Smoothing pass: 2 rounds of majority-neighbor clustering ─────────────
+  // Turns the salt-and-pepper per-cell assignments into contiguous patches.
+  // Coasts and high peaks are excluded — their resources are geography-driven.
+  for (let round = 0; round < 2; round++) {
+    const next = new Uint8Array(cells.resource);
+    for (const i of cells.i) {
+      if (cells.h[i] < 20) continue;
+      if (cells.h[i] > 65) continue;  // preserve mineral peaks
+      if (cells.t[i] === 1) continue; // preserve coastal fish/pearls/salt
+
+      const neighbors = cells.c[i];
+      const counts = new Uint8Array(22); // index = resource id
+      let landNeighbors = 0;
+      for (const n of neighbors) {
+        if (cells.h[n] < 20) continue;
+        landNeighbors++;
+        const res = cells.resource[n];
+        if (res > 0) counts[res]++;
+      }
+      if (landNeighbors === 0) continue;
+
+      let best = 0, bestCount = 0;
+      for (let res = 1; res < 22; res++) {
+        if (counts[res] > bestCount) { best = res; bestCount = counts[res]; }
+      }
+
+      const current = cells.resource[i];
+      const hasWaterAccess = cells.t[i] === 1 || cells.r[i] > 0;
+
+      // Never spread Fish to cells without water access
+      if (best === 6 && !hasWaterAccess) {
+        // Pick the next best non-fish resource instead
+        let nextBest = 0, nextCount = 0;
+        for (let res = 1; res < 22; res++) {
+          if (res === 6) continue;
+          if (counts[res] > nextCount) { nextBest = res; nextCount = counts[res]; }
+        }
+        best = nextBest; bestCount = nextCount;
+      }
+
+      if (current === 0) {
+        if (bestCount >= Math.min(4, landNeighbors)) next[i] = best;
+      } else if (best !== current && best !== 0) {
+        if (bestCount >= Math.ceil(landNeighbors * 0.6)) next[i] = best;
+      }
+    }
+    cells.resource = next;
   }
 
   TIME && console.timeEnd("assignResources");

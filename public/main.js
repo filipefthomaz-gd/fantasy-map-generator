@@ -70,6 +70,7 @@ let temperature = viewbox.append("g").attr("id", "temperature");
 let coastline = viewbox.append("g").attr("id", "coastline");
 let ice = viewbox.append("g").attr("id", "ice");
 let prec = viewbox.append("g").attr("id", "prec").style("display", "none");
+let climate = viewbox.append("g").attr("id", "climate").style("display", "none");
 let population = viewbox.append("g").attr("id", "population");
 let emblems = viewbox.append("g").attr("id", "emblems").style("display", "none");
 let icons = viewbox.append("g").attr("id", "icons");
