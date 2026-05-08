@@ -14,8 +14,8 @@ function openTimeline() {
   if (modules.openTimeline) return;
   modules.openTimeline = true;
 
-  byId("timelineSave").addEventListener("click", saveTimelineSnapshot);
-  byId("timelineList").addEventListener("click", handleTimelineListClick);
+  document.getElementById("timelineSave").addEventListener("click", saveTimelineSnapshot);
+  document.getElementById("timelineList").addEventListener("click", handleTimelineListClick);
 }
 
 function saveTimelineSnapshot() {
@@ -24,9 +24,9 @@ function saveTimelineSnapshot() {
     return;
   }
 
-  const year = +byId("timelineYear").value;
-  const label = byId("timelineLabel").value.trim() || `Year ${year}`;
-  const note = byId("timelineNote").value.trim();
+  const year = +document.getElementById("timelineYear").value;
+  const label = document.getElementById("timelineLabel").value.trim() || `Year ${year}`;
+  const note = document.getElementById("timelineNote").value.trim();
 
   const pop = Array.from(pack.cells.pop).map(p => rn(p, 4));
 
@@ -56,8 +56,8 @@ function saveTimelineSnapshot() {
     mapTimeline.sort((a, b) => a.year - b.year);
   }
 
-  byId("timelineLabel").value = "";
-  byId("timelineNote").value = "";
+  document.getElementById("timelineLabel").value = "";
+  document.getElementById("timelineNote").value = "";
   renderTimelineList();
   tip(`Snapshot saved: ${label} (Year ${year})`, true, "success");
 }
@@ -116,7 +116,7 @@ function handleTimelineListClick(e) {
 }
 
 function renderTimelineList() {
-  const list = byId("timelineList");
+  const list = document.getElementById("timelineList");
   if (!mapTimeline.length) {
     list.innerHTML = `<div style="color:#999;padding:1em;text-align:center">No snapshots yet.<br>Fill in a year and label above, then click Save Snapshot.</div>`;
     return;

@@ -911,7 +911,7 @@ function toggleResources(event) {
     if (event && isCtrlClick(event)) editStyle("resources");
   } else {
     if (event && isCtrlClick(event)) return editStyle("resources");
-    byId("resources").innerHTML = "";
+    document.getElementById("resources").innerHTML = "";
     resourcesLayer.style("display", "none");
     turnButtonOff("toggleResources");
   }
@@ -943,7 +943,7 @@ function drawResources() {
 
   // Fills are masked to land; icons sit outside the mask so they always render.
   // Explicit emoji font stack ensures glyphs render in SVG across all browsers.
-  byId("resources").innerHTML =
+  document.getElementById("resources").innerHTML =
     `<g mask="url(#land)">${fillPaths.join("")}</g>` +
     `<g id="resourceIcons" font-family="'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji','Segoe UI Symbol',sans-serif" pointer-events="none">${iconTexts}</g>`;
   resourcesLayer.style("display", "block");
@@ -958,8 +958,8 @@ function toggleClimate(event) {
     if (event && isCtrlClick(event)) editStyle("climate");
   } else {
     if (event && isCtrlClick(event)) return editStyle("climate");
-    byId("climate").innerHTML = "";
-    byId("climate").style.display = "none";
+    document.getElementById("climate").innerHTML = "";
+    document.getElementById("climate").style.display = "none";
     turnButtonOff("toggleClimate");
   }
 }
@@ -1056,7 +1056,7 @@ function drawClimate() {
     );
   });
 
-  const el = byId("climate");
+  const el = document.getElementById("climate");
   el.innerHTML = parts.join("");
   el.style.display = "block";
 

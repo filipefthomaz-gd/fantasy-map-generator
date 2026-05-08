@@ -538,7 +538,7 @@ function invokeActiveZooming() {
   const isOptimized = shapeRendering.value === "optimizeSpeed";
 
   // sea_island coastline filter — cache the element, query attr once
-  if (_cachedSeaIsland === null) _cachedSeaIsland = byId("sea_island") || undefined;
+  if (_cachedSeaIsland === null) _cachedSeaIsland = document.getElementById("sea_island") || undefined;
   if (_cachedSeaIsland && +_cachedSeaIsland.getAttribute("auto-filter")) {
     const filter = scale > 1.5 && scale <= 2.6 ? null : scale > 2.6 ? "url(#blurFilter)" : "url(#dropShadow)";
     _cachedSeaIsland.setAttribute("filter", filter ?? "");
@@ -588,7 +588,7 @@ function invokeActiveZooming() {
     if (!_cachedMarkerElsMap) {
       _cachedMarkerElsMap = new Map();
       for (const {i} of pack.markers) {
-        const el = byId(`marker${i}`);
+        const el = document.getElementById(`marker${i}`);
         if (el) _cachedMarkerElsMap.set(i, el);
       }
     }
