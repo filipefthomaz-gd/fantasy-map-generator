@@ -784,7 +784,8 @@ function drawRivers() {
     }
 
     const meanderedPoints = Rivers.addMeandering(cells, points);
-    const path = Rivers.getRiverPath(meanderedPoints, widthFactor, sourceWidth);
+    const seasonalWidth = getSeasonalWidthFactor(widthFactor);
+    const path = Rivers.getRiverPath(meanderedPoints, seasonalWidth, sourceWidth);
     return `<path id="river${i}" d="${path}"/>`;
   });
   rivers.html(riverPaths.join(""));

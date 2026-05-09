@@ -492,6 +492,14 @@
             onclick="removePreset()"
           ></button>
 
+          <p>Season overlay:</p>
+          <div id="seasonButtons">
+            <button class="season-btn" data-season="q1" onclick="setSeason('q1')" data-tip="Q1 (Jan–Mar): N. winter / S. summer — cold north, warm south, swollen southern rivers">Q1</button>
+            <button class="season-btn" data-season="q2" onclick="setSeason('q2')" data-tip="Q2 (Apr–Jun): N. spring / S. autumn — northern thaw, southern cooling">Q2</button>
+            <button class="season-btn" data-season="q3" onclick="setSeason('q3')" data-tip="Q3 (Jul–Sep): N. summer / S. winter — warm north, cold south, swollen northern rivers">Q3</button>
+            <button class="season-btn" data-season="q4" onclick="setSeason('q4')" data-tip="Q4 (Oct–Dec): N. autumn / S. spring — northern cooling, southern thaw">Q4</button>
+          </div>
+
           <p>Displayed layers and layers order:</p>
           <ul
             data-tip="Click to toggle a layer, drag to raise or lower a layer. Ctrl + click to edit layer style"
@@ -8623,6 +8631,7 @@
     <script defer src="libs/polylabel.min.js?v1.105.0"></script>
     <script defer src="libs/simplify.js?v1.105.6"></script>
     <script defer src="modules/ui/layers.js?v=1.120.5"></script>
+    <script defer src="modules/ui/seasons.js?v=1.122.0"></script>
     <script defer src="modules/resources.js?v=1.0.0"></script>
     <script defer src="modules/ui/measurers.js?v=1.99.00"></script>
     <script defer src="modules/ui/style-presets.js?v=1.100.00"></script>

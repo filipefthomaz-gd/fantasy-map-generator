@@ -219,7 +219,7 @@ function showMapTooltip(point, e, i, g) {
   if (layerIsOn("togglePrecipitation") && land) tip("Annual Precipitation: " + getFriendlyPrecipitation(i));
   else if (layerIsOn("toggleResources") && pack.cells.resource?.[i]) tip("Resource: " + RESOURCES[pack.cells.resource[i]].name);
   else if (layerIsOn("togglePopulation")) tip(getPopulationTip(i));
-  else if (layerIsOn("toggleTemperature")) tip("Temperature: " + convertTemperature(grid.cells.temp[g]));
+  else if (layerIsOn("toggleTemperature")) tip("Temperature: " + convertTemperature(getDisplayTemp(g)));
   else if (layerIsOn("toggleBiomes") && pack.cells.biome[i]) {
     const biome = pack.cells.biome[i];
     tip("Biome: " + biomesData.name[biome]);
@@ -272,7 +272,7 @@ function updateCellInfo(point, i, g) {
   infoArea.innerHTML = cells.area[i] ? si(getArea(cellArea(i))) + " " + getAreaUnit() : "n/a";
   infoElevation.innerHTML = getElevation(pack.features[f], pack.cells.h[i]);
   infoDepth.innerHTML = getDepth(pack.features[f], point);
-  infoTemp.innerHTML = convertTemperature(grid.cells.temp[g]);
+  infoTemp.innerHTML = convertTemperature(getDisplayTemp(g));
   infoPrec.innerHTML = cells.h[i] >= 20 ? getFriendlyPrecipitation(i) : "n/a";
   infoRiver.innerHTML = cells.h[i] >= 20 && cells.r[i] ? getRiverInfo(cells.r[i]) : "no";
   infoState.innerHTML =

@@ -29,13 +29,16 @@ const temperatureRenderer = (): void => {
   const { cells, vertices } = grid;
   const n = cells.i.length;
 
+  // Use seasonally-adjusted temperatures when a season is active
+  const temps: ArrayLike<number> = (window as any).seasonalTemps || cells.temp;
+
   const checkedCells = new Uint8Array(n);
   const addToChecked = (cellId: number) => {
     checkedCells[cellId] = 1;
   };
 
-  const minTemp = Number(min(cells.temp)) || 0;
-  const maxTemp = Number(max(cells.temp)) || 0;
+  const minTemp = Number(min(Array.from(temps))) || 0;
+  const maxTemp = Number(max(Array.from(temps))) || 0;
   const step = Math.max(Math.round(Math.abs(minTemp - maxTemp) / 5), 1);
 
   const isolines = range(minTemp + step, maxTemp, step);
@@ -43,14 +46,14 @@ const temperatureRenderer = (): void => {
   const labels: [number, number, number][] = []; // store label coordinates
 
   for (const cellId of cells.i) {
-    const t = cells.temp[cellId];
+    const t = temps[cellId];
     if (checkedCells[cellId] || !isolines.includes(t)) continue;
 
     const startingVertex = findStart(cellId, t);
     if (!startingVertex) continue;
     checkedCells[cellId] = 1;
 
-    const ofSameType = (cellId: number) => cells.temp[cellId] >= t;
+    const ofSameType = (cellId: number) => temps[cellId] >= t;
     const chain = connectVertices({
       vertices,
       startingVertex,
@@ -115,7 +118,7 @@ const temperatureRenderer = (): void => {
         vertices.c[v].some((c: number) => c >= n),
       ); // map border cell
     return cells.v[i][
-      cells.c[i].findIndex((c: number) => cells.temp[c] < t || !cells.temp[c])
+      cells.c[i].findIndex((c: number) => temps[c] < t || !temps[c])
     ];
   }
 
