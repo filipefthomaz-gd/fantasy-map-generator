@@ -19,7 +19,9 @@ function editRouteGroups() {
   ensureEl("routeGroupsEditorAdd").addEventListener("click", addGroup);
   ensureEl("routeGroupsEditorBody").on("click", ev => {
     const group = ev.target.closest(".states")?.dataset.id;
+    if (!group) return;
     if (ev.target.classList.contains("editStyle")) editStyle("routes", group);
+    else if (ev.target.classList.contains("toggleGroupVisibility")) toggleGroupVisibility(group);
     else if (ev.target.classList.contains("removeGroup")) removeGroup(group);
   });
 
@@ -28,9 +30,11 @@ function editRouteGroups() {
 
     const lines = Array.from(routes.selectAll("g")._groups[0]).map(el => {
       const count = el.children.length;
-      return /* html */ `<div data-id="${el.id}" class="states" style="display: flex; justify-content: space-between;">
-          <span>${el.id} (${count})</span>
+      const hidden = el.style.display === "none";
+      return /* html */ `<div data-id="${el.id}" class="states" style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="opacity: ${hidden ? 0.4 : 1}">${el.id} (${count})</span>
           <div style="width: auto; display: flex; gap: 0.4em;">
+            <span data-tip="Toggle visibility" class="toggleGroupVisibility ${hidden ? "icon-eye-off" : "icon-eye"} pointer" style="font-size: smaller;"></span>
             <span data-tip="Edit style" class="editStyle icon-brush pointer" style="font-size: smaller;"></span>
             <span data-tip="Remove group" class="removeGroup icon-trash pointer"></span>
           </div>
@@ -40,7 +44,15 @@ function editRouteGroups() {
     ensureEl("routeGroupsEditorBody").innerHTML = lines.join("");
   }
 
-  const DEFAULT_GROUPS = ["roads", "trails", "searoutes"];
+  function toggleGroupVisibility(group) {
+    const el = document.getElementById(group);
+    if (!el) return;
+    const isHidden = el.style.display === "none";
+    el.style.display = isHidden ? "" : "none";
+    addLines();
+  }
+
+  const DEFAULT_GROUPS = ["roads", "trails", "searoutes", "railways", "airways"];
 
   function addGroup() {
     prompt("Type group name", {default: "route-group-new"}, v => {

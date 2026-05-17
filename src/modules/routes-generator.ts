@@ -18,6 +18,9 @@ const ROUTES_SHARP_ANGLE = 135;
 const ROUTES_VERY_SHARP_ANGLE = 115;
 
 const MIN_PASSABLE_SEA_TEMP = -4;
+// Height scale is 20 (sea level) to 100 (highest peaks). Cells above this threshold
+// are impassable for railways — pathfinding must find a mountain pass or won't connect.
+const RAILWAY_MAX_HEIGHT = 70;
 const ROUTE_TYPE_MODIFIERS: Record<string, number> = {
   "-1": 1, // coastline
   "-2": 1.8, // sea
@@ -40,6 +43,8 @@ const models: Record<string, Record<string, number>> = {
     prefix_suffix: 2,
     the_descriptor_prefix_suffix: 1,
   },
+  railways: { burg_suffix: 2, prefix_suffix: 4, the_descriptor_prefix_suffix: 2 },
+  airways: { burg_suffix: 1, prefix_suffix: 3, the_descriptor_prefix_suffix: 4 },
 };
 
 const prefixes: string[] = [
@@ -172,15 +177,20 @@ const suffixes: Record<string, Record<string, number>> = {
   roads: { road: 7, route: 3, way: 2, highway: 1 },
   trails: { trail: 4, path: 1, track: 1, pass: 1 },
   searoutes: { "sea route": 5, lane: 2, passage: 1, seaway: 1 },
+  railways: { railway: 5, railroad: 3, "rail line": 2, "iron road": 1 },
+  airways: { airway: 4, "air route": 3, "flight path": 2, skyway: 1 },
 };
 
 export interface Route {
   i: number;
-  group: "roads" | "trails" | "searoutes";
+  group: "roads" | "trails" | "searoutes" | "railways" | "airways";
   feature: number;
   points: number[][];
   cells?: number[];
   merged?: boolean;
+  name?: string;
+  lock?: boolean;
+  airport?: number;
 }
 
 class RoutesModule {
@@ -278,12 +288,23 @@ class RoutesModule {
   private createCostEvaluator({
     isWater,
     connections,
+    hostileStates = new Set<number>(),
+    mountainPenalty = 3,
+    airway = false,
+    maxHeight = Infinity,
+    hostilePenalty = 8,
   }: {
     isWater: boolean;
     connections: Map<string, boolean>;
+    hostileStates?: Set<number>;
+    mountainPenalty?: number;
+    airway?: boolean;
+    maxHeight?: number;
+    hostilePenalty?: number;
   }) {
     function getLandPathCost(current: number, next: number) {
       if (pack.cells.h[next] < 20) return Infinity; // ignore water cells
+      if (pack.cells.h[next] > maxHeight) return Infinity; // terrain too steep
 
       const habitability = biomesData.habitability[pack.cells.biome[next]];
       if (!habitability) return Infinity; // inhabitable cells are not passable (e.g. glacier)
@@ -292,19 +313,25 @@ class RoutesModule {
         pack.cells.p[current],
         pack.cells.p[next],
       );
-      const habitabilityModifier = 1 + Math.max(100 - habitability, 0) / 1000; // [1, 1.1];
-      const heightModifier = 1 + Math.max(pack.cells.h[next] - 25, 25) / 25; // [1, 3];
+      const habitabilityModifier = airway
+        ? 1
+        : 1 + Math.max(100 - habitability, 0) / 1000; // [1, 1.1]
+      const heightModifier = airway
+        ? 1 + Math.max(pack.cells.h[next] - 25, 0) / 2000 // nearly flat for air
+        : 1 + (Math.max(pack.cells.h[next] - 25, 25) / 25) * (mountainPenalty / 3); // [2, mP*4/3]
       const connectionModifier = connections.has(`${current}-${next}`)
         ? 0.5
         : 1;
       const burgModifier = pack.cells.burg[next] ? 1 : 3;
+      const hostileMod = hostileStates.has(pack.cells.state[next]) ? hostilePenalty : 1;
 
       const pathCost =
         distanceCost *
         habitabilityModifier *
         heightModifier *
         connectionModifier *
-        burgModifier;
+        burgModifier *
+        hostileMod;
       return pathCost;
     }
 
@@ -367,13 +394,23 @@ class RoutesModule {
     connections,
     start,
     exit,
+    hostileStates,
+    mountainPenalty,
+    airway,
+    maxHeight,
+    hostilePenalty,
   }: {
     isWater: boolean;
     connections: Map<string, boolean>;
     start: number;
     exit: number;
+    hostileStates?: Set<number>;
+    mountainPenalty?: number;
+    airway?: boolean;
+    maxHeight?: number;
+    hostilePenalty?: number;
   }) {
-    const getCost = this.createCostEvaluator({ isWater, connections });
+    const getCost = this.createCostEvaluator({ isWater, connections, hostileStates, mountainPenalty, airway, maxHeight, hostilePenalty });
     const pathCells = findPath(
       start,
       (current) => current === exit,
@@ -385,6 +422,16 @@ class RoutesModule {
     return segments;
   }
 
+  private getHostileStates(stateId: number): Set<number> {
+    const state = pack.states[stateId];
+    if (!state?.diplomacy) return new Set();
+    const hostile = new Set<number>();
+    (state.diplomacy as string[]).forEach((rel, otherId) => {
+      if (rel === "Enemy" || rel === "Rival") hostile.add(otherId);
+    });
+    return hostile;
+  }
+
   private generateMainRoads(connections: Map<string, boolean>) {
     TIME && console.time("generateMainRoads");
     const { capitalsByFeature } = this.sortBurgsByFeature(pack.burgs);
@@ -394,14 +441,24 @@ class RoutesModule {
       const points = featureCapitals.map((burg) => [burg.x, burg.y] as Point);
       const urquhartEdges = this.calculateUrquhartEdges(points);
       urquhartEdges.forEach(([fromId, toId]) => {
-        const start = featureCapitals[fromId].cell;
-        const exit = featureCapitals[toId].cell;
+        const burgA = featureCapitals[fromId];
+        const burgB = featureCapitals[toId];
+        const stateA = burgA.state ?? 0;
+        const stateB = burgB.state ?? 0;
 
+        if (stateA && stateB && stateA !== stateB) {
+          const rel = (pack.states[stateA]?.diplomacy as string[] | undefined)?.[stateB] ?? "Neutral";
+          const allowed = ["Ally", "Friendly", "Vassal", "Suzerain"];
+          if (!allowed.includes(rel)) return;
+        }
+
+        const hostileStates = stateA ? this.getHostileStates(stateA) : new Set<number>();
         const segments = this.findPathSegments({
           isWater: false,
           connections,
-          start,
-          exit,
+          start: burgA.cell!,
+          exit: burgB.cell!,
+          hostileStates,
         });
         for (const segment of segments) {
           this.addConnections(segment, connections);
@@ -484,6 +541,301 @@ class RoutesModule {
 
     TIME && console.timeEnd("generateSeaRoutes");
     return seaRoutes;
+  }
+
+  private getAdvancementContext() {
+    const valid = pack.states.filter((s: any) => s && s.i && !s.removed && s.burgs > 0);
+
+    const sorted = (arr: number[]) => [...arr].sort((a, b) => a - b);
+    const median = (arr: number[]) => arr[Math.floor(arr.length / 2)] ?? 0;
+
+    // Average burg size: urban population points per burg (size-neutral)
+    const avgBurgSizes = sorted(valid.map((s: any) => (s.urban ?? 0) / s.burgs));
+    // Total population (not density — large countries shouldn't be penalized for area)
+    const totalPops = sorted(valid.map((s: any) =>
+      (s.rural ?? 0) * (populationRate as number) + (s.urban ?? 0) * (populationRate as number) * (urbanization as number)
+    ));
+
+    return {
+      medianAvgBurgSize: Math.max(median(avgBurgSizes), 1e-6),
+      medianTotalPop: Math.max(median(totalPops), 1e-6),
+    };
+  }
+
+  private formScore(form: string): number {
+    const scores: Record<string, number> = {
+      Union: 25, Republic: 22, Democracy: 22, Federation: 23,
+      Oligarchy: 16, Constitutional: 18, Parliamentary: 18,
+      Monarchy: 12, Kingdom: 12, Empire: 10, Duchy: 10, Sultanate: 10, Caliphate: 10, Shogunate: 11,
+      Theocracy: 8, Papacy: 8, Imamate: 8,
+      Despotism: 5, Dictatorship: 5,
+      Tribal: 4, Horde: 3, Chiefdom: 5, Clan: 4,
+      Anarchy: 0,
+    };
+    return scores[form] ?? 8;
+  }
+
+  getAdvancementDetails(state: any, ctx?: ReturnType<RoutesModule["getAdvancementContext"]>) {
+    const context = ctx ?? this.getAdvancementContext();
+
+    const rural = (state.rural ?? 0) * (populationRate as number);
+    const urban = (state.urban ?? 0) * (populationRate as number) * (urbanization as number);
+    const totalPop = rural + urban;
+
+    const urbRate = totalPop > 0 ? urban / totalPop : 0;
+    const urbScore = Math.round(urbRate * 35);
+
+    const avgBurgSize = (state.burgs ?? 0) > 0 ? (state.urban ?? 0) / state.burgs : 0;
+    const burgScore = Math.min(Math.round((avgBurgSize / context.medianAvgBurgSize) * 10), 20);
+
+    const popScore = Math.min(Math.round((totalPop / context.medianTotalPop) * 10), 20);
+
+    const formPts = this.formScore(state.form);
+
+    const score = Math.min(urbScore + burgScore + popScore + formPts, 100);
+    const tier = score >= 70 ? "Advanced" : score >= 40 ? "Industrial" : "Pre-industrial";
+
+    return { score, urbScore, burgScore, popScore, formPts, tier };
+  }
+
+  private computeAdvancement(state: any, ctx: ReturnType<RoutesModule["getAdvancementContext"]>): number {
+    return this.getAdvancementDetails(state, ctx).score;
+  }
+
+  private generateRailwayRoutes(connections: Map<string, boolean>): Route[] {
+    TIME && console.time("generateRailwayRoutes");
+    const railways: Route[] = [];
+    const ctx = this.getAdvancementContext();
+    const RAILWAY_THRESHOLD = 40;
+
+    const qualifyingStates = pack.states.filter(
+      (s: any) => s && s.i && !s.removed && this.computeAdvancement(s, ctx) >= RAILWAY_THRESHOLD,
+    );
+
+    for (const state of qualifyingStates) {
+      const advScore = this.computeAdvancement(state, ctx);
+      const maxBurgs = Math.min(Math.ceil(advScore / 20), 6);
+
+      const stateBurgs = pack.burgs
+        .filter((b: any) => b && b.i && !b.removed && b.state === state.i && (b.capital || b.station === 1 || (b.population ?? 0) > 2))
+        .sort((a: any, b: any) => (b.population ?? 0) - (a.population ?? 0))
+        .slice(0, maxBurgs);
+
+      // Also include manually-set station burgs not yet in the list
+      const stationBurgs = pack.burgs.filter(
+        (b: any) => b && b.i && !b.removed && b.state === state.i && b.station === 1 &&
+          !stateBurgs.some((sb: any) => sb.i === b.i),
+      );
+      stateBurgs.push(...stationBurgs);
+
+      if (stateBurgs.length < 2) continue;
+
+      const hostileStates = this.getHostileStates(state.i);
+      const points = stateBurgs.map((b: any) => [b.x, b.y] as Point);
+      const edges: [number, number][] =
+        stateBurgs.length === 2
+          ? [[0, 1]]
+          : (this.calculateUrquhartEdges(points) as [number, number][]);
+
+      edges.forEach(([fromId, toId]) => {
+        const segments = this.findPathSegments({
+          isWater: false,
+          connections,
+          start: stateBurgs[fromId].cell!,
+          exit: stateBurgs[toId].cell!,
+          mountainPenalty: 8,
+          maxHeight: RAILWAY_MAX_HEIGHT,
+          hostileStates,
+          hostilePenalty: 60,
+        });
+        for (const seg of segments) {
+          this.addConnections(seg, connections);
+          railways.push({ feature: state.center, cells: seg } as Route);
+        }
+      });
+    }
+
+    // Connect all manually-set station burgs grouped by land feature (not state).
+    // This ensures stations in different states on the same continent are linked.
+    const qualifyingStateIds = new Set(qualifyingStates.map((s: any) => s.i));
+    const manualStationsByFeature = new Map<number, any[]>();
+    pack.burgs.forEach((b: any) => {
+      if (!b || !b.i || b.removed || b.station !== 1) return;
+      if (qualifyingStateIds.has(b.state)) return; // already handled per-state above
+      const feature = pack.cells.f[b.cell] as number;
+      if (!manualStationsByFeature.has(feature)) manualStationsByFeature.set(feature, []);
+      manualStationsByFeature.get(feature)!.push(b);
+    });
+    for (const [feature, stations] of manualStationsByFeature) {
+      if (stations.length < 2) continue;
+      const points = stations.map((b: any) => [b.x, b.y] as Point);
+      const edges: [number, number][] =
+        stations.length === 2
+          ? [[0, 1]]
+          : (this.calculateUrquhartEdges(points) as [number, number][]);
+      edges.forEach(([fromId, toId]) => {
+        const segments = this.findPathSegments({
+          isWater: false, connections,
+          start: stations[fromId].cell!, exit: stations[toId].cell!,
+          mountainPenalty: 8, maxHeight: RAILWAY_MAX_HEIGHT,
+        });
+        for (const seg of segments) {
+          this.addConnections(seg, connections);
+          railways.push({ feature, cells: seg } as Route);
+        }
+      });
+    }
+
+    // Cross-border railways between qualifying states
+    for (let ai = 0; ai < qualifyingStates.length; ai++) {
+      const stateA = qualifyingStates[ai];
+      for (let bi = ai + 1; bi < qualifyingStates.length; bi++) {
+        const stateB = qualifyingStates[bi];
+        const rel = (stateA.diplomacy as string[] | undefined)?.[stateB.i] ?? "Neutral";
+
+        if (rel === "Enemy" || rel === "Rival") {
+          // Rare contested line — roughly 10% chance, capitals only
+          if (Math.random() > 0.1) continue;
+        } else if (rel !== "Ally") {
+          continue;
+        }
+
+        const capA = pack.burgs[stateA.capital];
+        const capB = pack.burgs[stateB.capital];
+        if (!capA || !capB || capA.removed || capB.removed) continue;
+
+        const segments = this.findPathSegments({
+          isWater: false,
+          connections,
+          start: capA.cell!,
+          exit: capB.cell!,
+          mountainPenalty: 8,
+          maxHeight: RAILWAY_MAX_HEIGHT,
+        });
+        for (const seg of segments) {
+          this.addConnections(seg, connections);
+          railways.push({ feature: capA.feature as number, cells: seg } as Route);
+        }
+      }
+    }
+
+    TIME && console.timeEnd("generateRailwayRoutes");
+    return railways;
+  }
+
+  generateRailways() {
+    const locked = pack.routes.filter((r: Route) => r.lock && r.group === "railways");
+    const connections = new Map<string, boolean>();
+    locked.forEach((r: Route) => this.addConnections(r.points.map((p) => p[2]), connections));
+
+    pack.routes = pack.routes.filter((r: Route) => r.group !== "railways" || r.lock);
+    const pointsArray = this.preparePointsArray();
+
+    for (const { feature, cells, merged } of this.mergeRoutes(this.generateRailwayRoutes(connections))) {
+      if (merged) continue;
+      const points = this.getPoints("railways", cells!, pointsArray);
+      pack.routes.push({ i: pack.routes.length, group: "railways", feature, points } as Route);
+    }
+    pack.cells.routes = this.buildLinks(pack.routes);
+  }
+
+  private generateAirwayRoutes(): Route[] {
+    TIME && console.time("generateAirwayRoutes");
+    const airways: Route[] = [];
+    const ctx = this.getAdvancementContext();
+    const AIRWAY_THRESHOLD = 70;
+
+    const qualifyingStates = pack.states.filter(
+      (s: any) => s && s.i && !s.removed && this.computeAdvancement(s, ctx) >= AIRWAY_THRESHOLD,
+    );
+
+    const qualifyingStateIds = new Set(qualifyingStates.map((s: any) => s.i));
+
+    const airportsByState: Record<number, any[]> = {};
+
+    // Collect airports for qualifying states (manual flag or high-population/capital burgs)
+    for (const state of qualifyingStates) {
+      const airports = pack.burgs.filter(
+        (b: any) =>
+          b && b.i && !b.removed && b.state === state.i &&
+          (b.airport === 1 || b.capital === 1 || (b.population ?? 0) > 5),
+      );
+      if (airports.length >= 1) airportsByState[state.i] = airports;
+    }
+
+    // Within-state airways for qualifying states
+    for (const stateId of Object.keys(airportsByState).map(Number)) {
+      const airports = airportsByState[stateId];
+      if (!airports || airports.length < 2) continue;
+
+      const state = pack.states[stateId];
+      const points = airports.map((b: any) => [b.x, b.y] as Point);
+      const edges: [number, number][] =
+        airports.length === 2
+          ? [[0, 1]]
+          : (this.calculateUrquhartEdges(points) as [number, number][]);
+
+      edges.forEach(([fromId, toId]) => {
+        airways.push({
+          feature: state?.center ?? airports[fromId].feature,
+          cells: [airports[fromId].cell!, airports[toId].cell!],
+        } as Route);
+      });
+    }
+
+    // Connect manually-set airports from non-qualifying states globally (air routes cross borders).
+    const manualAirports = pack.burgs.filter(
+      (b: any) => b && b.i && !b.removed && b.airport === 1 && !qualifyingStateIds.has(b.state),
+    );
+    if (manualAirports.length >= 2) {
+      const points = manualAirports.map((b: any) => [b.x, b.y] as Point);
+      const edges: [number, number][] =
+        manualAirports.length === 2
+          ? [[0, 1]]
+          : (this.calculateUrquhartEdges(points) as [number, number][]);
+      edges.forEach(([fromId, toId]) => {
+        airways.push({
+          feature: manualAirports[fromId].feature as number,
+          cells: [manualAirports[fromId].cell!, manualAirports[toId].cell!],
+        } as Route);
+      });
+    }
+
+    // Cross-border airways: Allied or Friendly qualifying states
+    for (let ai = 0; ai < qualifyingStates.length; ai++) {
+      const stateA = qualifyingStates[ai];
+      if (!airportsByState[stateA.i]) continue;
+      for (let bi = ai + 1; bi < qualifyingStates.length; bi++) {
+        const stateB = qualifyingStates[bi];
+        if (!airportsByState[stateB.i]) continue;
+        const rel = (stateA.diplomacy as string[] | undefined)?.[stateB.i] ?? "Neutral";
+        if (rel !== "Ally" && rel !== "Friendly") continue;
+
+        const capA = pack.burgs[stateA.capital];
+        const capB = pack.burgs[stateB.capital];
+        if (!capA || !capB || capA.removed || capB.removed) continue;
+
+        airways.push({
+          feature: capA.feature as number,
+          cells: [capA.cell!, capB.cell!],
+        } as Route);
+      }
+    }
+
+    TIME && console.timeEnd("generateAirwayRoutes");
+    return airways;
+  }
+
+  generateAirways() {
+    pack.routes = pack.routes.filter((r: Route) => r.group !== "airways" || r.lock);
+    const pointsArray = this.preparePointsArray();
+
+    for (const { feature, cells, merged } of this.generateAirwayRoutes()) {
+      if (merged) continue;
+      const points = this.getPoints("airways", cells!, pointsArray);
+      pack.routes.push({ i: pack.routes.length, group: "airways", feature, points } as Route);
+    }
+    pack.cells.routes = this.buildLinks(pack.routes);
   }
 
   private preparePointsArray(): Point[] {
@@ -591,15 +943,32 @@ class RoutesModule {
   }
 
   generate(lockedRoutes: Route[] = []) {
-    const connections = new Map();
+    const connections = new Map<string, boolean>();
     lockedRoutes.forEach((route: Route) => {
-      this.addConnections(
-        route.points.map((p) => p[2]),
-        connections,
-      );
+      this.addConnections(route.points.map((p) => p[2]), connections);
     });
 
     pack.routes = this.createRoutesData(lockedRoutes, connections);
+
+    // Railways
+    const lockedRailways = lockedRoutes.filter((r) => r.group === "railways");
+    const railConnections = new Map<string, boolean>();
+    lockedRailways.forEach((r) => this.addConnections(r.points.map((p) => p[2]), railConnections));
+    const railPointsArray = this.preparePointsArray();
+    for (const { feature, cells, merged } of this.mergeRoutes(this.generateRailwayRoutes(railConnections))) {
+      if (merged) continue;
+      const points = this.getPoints("railways", cells!, railPointsArray);
+      pack.routes.push({ i: pack.routes.length, group: "railways", feature, points } as Route);
+    }
+
+    // Airways
+    const airPointsArray = this.preparePointsArray();
+    for (const { feature, cells, merged } of this.generateAirwayRoutes()) {
+      if (merged) continue;
+      const points = this.getPoints("airways", cells!, airPointsArray);
+      pack.routes.push({ i: pack.routes.length, group: "airways", feature, points } as Route);
+    }
+
     pack.cells.routes = this.buildLinks(pack.routes);
   }
 
@@ -711,10 +1080,12 @@ class RoutesModule {
     const connections = pack.cells.routes[cellId];
     if (!connections) return 0;
 
-    const connectivityRateMap = {
+    const connectivityRateMap: Record<string, number> = {
       roads: 0.2,
       trails: 0.1,
       searoutes: 0.2,
+      railways: 0.3,
+      airways: 0.15,
       default: 0.1,
     };
 
@@ -722,7 +1093,7 @@ class RoutesModule {
       const route = pack.routes.find((route) => route.i === routeId);
       if (!route) return acc;
       const rate =
-        connectivityRateMap[route.group] || connectivityRateMap.default;
+        connectivityRateMap[route.group] ?? connectivityRateMap["default"];
       return acc + rate;
     }, 0.8);
 
@@ -751,8 +1122,8 @@ class RoutesModule {
       return null;
     }
 
-    const model = rw(models[group]);
-    const suffix = rw(suffixes[group]);
+    const model = rw(models[group] || models["roads"]);
+    const suffix = rw(suffixes[group] || suffixes["roads"]);
 
     const burgName = getBurgName();
     if (model === "burg_suffix" && burgName) return `${burgName} ${suffix}`;
@@ -770,6 +1141,8 @@ class RoutesModule {
       roads: curveCatmullRom.alpha(0.1),
       trails: curveCatmullRom.alpha(0.1),
       searoutes: curveCatmullRom.alpha(0.5),
+      railways: curveCatmullRom.alpha(0.1),
+      airways: curveCatmullRom.alpha(0.5),
       default: curveCatmullRom.alpha(0.1),
     };
     lineGen.curve(ROUTE_CURVES[group] || ROUTE_CURVES.default);

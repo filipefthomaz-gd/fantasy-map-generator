@@ -25,6 +25,7 @@ toolsContent.addEventListener("click", function (event) {
   else if (button === "overviewChartsButton") overviewCharts();
   else if (button === "overviewBurgsButton") overviewBurgs();
   else if (button === "overviewRoutesButton") overviewRoutes();
+  else if (button === "travelCalculatorButton") openTravelCalculator();
   else if (button === "overviewRiversButton") overviewRivers();
   else if (button === "overviewMilitaryButton") overviewMilitary();
   else if (button === "overviewMarkersButton") overviewMarkers();
@@ -87,6 +88,14 @@ function processFeatureRegeneration(event, button) {
   } else if (button === "regenerateRoutes") {
     regenerateRoutes();
     if (!layerIsOn("toggleRoutes")) toggleRoutes();
+  } else if (button === "regenerateRailways") {
+    Routes.generateRailways();
+    if (layerIsOn("toggleRoutes")) drawRoutes();
+    else toggleRoutes();
+  } else if (button === "regenerateAirways") {
+    Routes.generateAirways();
+    if (layerIsOn("toggleRoutes")) drawRoutes();
+    else toggleRoutes();
   } else if (button === "regenerateRivers") regenerateRivers();
   else if (button === "regeneratePopulation") recalculatePopulation();
   else if (button === "regenerateStates") regenerateStates();

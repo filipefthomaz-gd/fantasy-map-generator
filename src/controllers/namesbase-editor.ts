@@ -1,14 +1,58 @@
 import { max as d3max, min as d3min, mean, median } from "d3";
 import { ensureEl, openURL, rn, unique } from "../utils";
 
+const HISTORY_KEY = "namesbase";
+
+function pushNamesbaseSnapshot(): void {
+  UndoRedo.push(
+    HISTORY_KEY,
+    nameBases.map((b) => ({ ...b })),
+  );
+}
+
+function restoreNamesbaseSnapshot(snapshot: any[]): void {
+  nameBases.length = 0;
+  nameBases.push(...snapshot);
+  Names.clearChains();
+  for (const b of snapshot) Names.updateChain(b.i);
+  createBasesList();
+  updateInputs();
+}
+
 addListeners();
 
 export function open(): void {
   if (customization) return;
   closeDialogs("#namesbaseEditor, .stable");
 
+  UndoRedo.register(HISTORY_KEY);
   createBasesList();
   updateInputs();
+
+  // Add undo/redo buttons to the dialog
+  const undoBtn = ensureEl<HTMLButtonElement>("namesbaseUndo");
+  const redoBtn = ensureEl<HTMLButtonElement>("namesbaseRedo");
+  const syncButtons = () => {
+    undoBtn.disabled = !UndoRedo.canUndo(HISTORY_KEY);
+    redoBtn.disabled = !UndoRedo.canRedo(HISTORY_KEY);
+  };
+  undoBtn.on("click", () => {
+    const snapshot = UndoRedo.undo(
+      HISTORY_KEY,
+      nameBases.map((b) => ({ ...b })),
+    );
+    if (snapshot) restoreNamesbaseSnapshot(snapshot);
+    syncButtons();
+  });
+  redoBtn.on("click", () => {
+    const snapshot = UndoRedo.redo(
+      HISTORY_KEY,
+      nameBases.map((b) => ({ ...b })),
+    );
+    if (snapshot) restoreNamesbaseSnapshot(snapshot);
+    syncButtons();
+  });
+  syncButtons();
 
   $("#namesbaseEditor").dialog({
     title: "Namesbase Editor",
@@ -121,6 +165,7 @@ function updateNamesData(): void {
     tip("The names data provided is too short or incorrect", false, "error");
     return;
   }
+  pushNamesbaseSnapshot();
   const securedNamesData = input.value.replace(/[/|]/g, "");
   nameBases[base].b = securedNamesData;
   input.value = securedNamesData;
@@ -130,6 +175,7 @@ function updateNamesData(): void {
 function updateBaseName(rawName: string): void {
   const base = +ensureEl<HTMLSelectElement>("namesbaseSelect").value;
   const select = ensureEl<HTMLSelectElement>("namesbaseSelect");
+  pushNamesbaseSnapshot();
   const name = rawName.replace(/[/|]/g, "");
   select.options[select.selectedIndex].innerHTML = name;
   nameBases[base].name = name;
@@ -141,6 +187,7 @@ function updateBaseMin(value: string): void {
     tip("Minimal length cannot be greater than maximal", false, "error");
     return;
   }
+  pushNamesbaseSnapshot();
   nameBases[base].min = +value;
 }
 
@@ -150,11 +197,13 @@ function updateBaseMax(value: string): void {
     tip("Maximal length should be greater than minimal", false, "error");
     return;
   }
+  pushNamesbaseSnapshot();
   nameBases[base].max = +value;
 }
 
 function updateBaseDuplication(value: string): void {
   const base = +ensureEl<HTMLSelectElement>("namesbaseSelect").value;
+  pushNamesbaseSnapshot();
   nameBases[base].d = value;
 }
 
@@ -246,6 +295,7 @@ function analyzeNamesbase(): void {
 }
 
 function namesbaseAdd(): void {
+  pushNamesbaseSnapshot();
   const baseId = nameBases.length;
   const b =
     "This,is,an,example,of,name,base,showing,correct,format,It,should,have,at,least,one,hundred,names,separated,with,comma";
@@ -271,6 +321,7 @@ function namesbaseAdd(): void {
 }
 
 function namesbaseRestoreDefault(): void {
+  pushNamesbaseSnapshot();
   alertMessage.innerHTML = /* html */ `Are you sure you want to restore default namesbase?`;
   $("#alert").dialog({
     resizable: false,

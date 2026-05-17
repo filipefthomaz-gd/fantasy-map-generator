@@ -66,6 +66,14 @@ let routes = viewbox.append("g").attr("id", "routes");
 let roads = routes.append("g").attr("id", "roads");
 let trails = routes.append("g").attr("id", "trails");
 let searoutes = routes.append("g").attr("id", "searoutes");
+let railways = routes.append("g").attr("id", "railways")
+  .attr("stroke", "#222222").attr("stroke-width", 0.6)
+  .attr("stroke-dasharray", "3 1").attr("stroke-linecap", "square")
+  .attr("fill", "none").attr("opacity", 0.7);
+let airways = routes.append("g").attr("id", "airways")
+  .attr("stroke", "#8899bb").attr("stroke-width", 0.35)
+  .attr("stroke-dasharray", "0.5 3").attr("stroke-linecap", "round")
+  .attr("fill", "none").attr("opacity", 0.5);
 let temperature = viewbox.append("g").attr("id", "temperature");
 let coastline = viewbox.append("g").attr("id", "coastline");
 let ice = viewbox.append("g").attr("id", "ice");

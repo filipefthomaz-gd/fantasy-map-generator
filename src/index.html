@@ -2195,6 +2195,9 @@
             <button id="overviewRoutesButton" data-tip="Click to open Routes Overview" data-shortcut="Shift + U">
               Routes
             </button>
+            <button id="travelCalculatorButton" data-tip="Click to open Travel Calculator" data-shortcut="Shift + W">
+              Travel
+            </button>
             <button id="editStatesButton" data-tip="Click to open States Editor" data-shortcut="Shift + S">
               States
             </button>
@@ -2249,6 +2252,8 @@
               Rivers
             </button>
             <button id="regenerateRoutes" data-tip="Click to regenerate all unlocked routes">Routes</button>
+            <button id="regenerateRailways" data-tip="Click to regenerate railway network (advanced states only)">Railways</button>
+            <button id="regenerateAirways" data-tip="Click to regenerate airway network (most advanced states only)">Airways</button>
             <button
               id="regenerateStates"
               data-tip="Click to regenerate non-locked states. Emblems and military forces will be regenerated as well, burgs will remain as they are, but capitals will be different"
@@ -3612,6 +3617,20 @@
                   data-feature="shanty"
                   class="burgFeature icon-campground"
                   style="font-size: 1em"
+                ></span>
+                <span
+                  id="burgStation"
+                  data-tip="Shows whether the burg has a railway station. Click to toggle"
+                  data-feature="station"
+                  class="burgFeature icon-sign"
+                  style="font-size: 1em; margin-left: 3px"
+                ></span>
+                <span
+                  id="burgAirport"
+                  data-tip="Shows whether the burg has an airport. Click to toggle"
+                  data-feature="airport"
+                  class="burgFeature icon-rocket"
+                  style="font-size: 1em; margin-left: 3px"
                 ></span>
               </div>
             </div>
@@ -4999,6 +5018,9 @@
             data-tip="Speak the examples. You can change voice and language in options"
             class="icon-voice"
           ></button>
+          <span style="flex:1"></span>
+          <button id="namesbaseUndo" disabled data-tip="Undo (Ctrl+Z)" class="icon-ccw"></button>
+          <button id="namesbaseRedo" disabled data-tip="Redo (Ctrl+Shift+Z)" class="icon-cw"></button>
         </div>
       </div>
 
@@ -5587,6 +5609,7 @@
           </div>
         </div>
 
+        <div id="routesGroupToggles" style="display:flex; flex-wrap:wrap; gap:0.3em; padding:0.3em 0.2em; border-bottom:1px solid #ccc;"></div>
         <div id="routesBody" class="table"></div>
 
         <div id="routesFooter" class="totalLine">
@@ -5615,6 +5638,38 @@
           <label for="routesSearch" data-tip="Filter by name or group" style="margin-left: 0.2em"
             >Search: <input id="routesSearch" type="search"
           /></label>
+        </div>
+      </div>
+
+      <div id="travelCalculator" class="dialog" style="display: none">
+        <div style="display:flex; gap:1em; padding:0.4em 0">
+          <div>
+            <div style="margin-bottom:0.2em">From</div>
+            <input id="travelFromSearch" type="search" placeholder="Filter burgs…" style="width:12em; display:block; margin-bottom:0.2em" />
+            <select id="travelFrom" size="6" style="width:12em; display:block"></select>
+          </div>
+          <div>
+            <div style="margin-bottom:0.2em">To</div>
+            <input id="travelToSearch" type="search" placeholder="Filter burgs…" style="width:12em; display:block; margin-bottom:0.2em" />
+            <select id="travelTo" size="6" style="width:12em; display:block"></select>
+          </div>
+        </div>
+        <div style="margin:0.4em 0">
+          <button id="travelCalcBtn">Calculate</button>
+        </div>
+        <div id="travelResults" style="display:none; margin-top:0.6em">
+          <div id="travelDistances" style="margin-bottom:0.5em"></div>
+          <table style="width:100%; border-collapse:collapse">
+            <thead>
+              <tr style="opacity:0.6; font-size:0.9em">
+                <th style="text-align:left; font-weight:normal">Mode</th>
+                <th style="text-align:right; font-weight:normal; padding-left:1.5em">Speed</th>
+                <th style="text-align:right; font-weight:normal; padding-left:1.5em">Est. Time</th>
+              </tr>
+            </thead>
+            <tbody id="travelTableBody"></tbody>
+          </table>
+          <div id="travelNote" style="font-size:0.85em; margin-top:0.5em; opacity:0.6"></div>
         </div>
       </div>
 
@@ -8675,6 +8730,7 @@
     <script defer src="modules/ui/markers-overview.js?v=1.120.5"></script>
     <script defer src="modules/ui/regiment-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/battle-screen.js?v=1.120.5"></script>
+    <script defer src="modules/ui/travel-calculator.js"></script>
     <script defer src="modules/ui/emblems-editor.js?v=1.99.00"></script>
     <script defer src="modules/ui/markers-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/3d.js?v=1.99.00"></script>

@@ -16,6 +16,18 @@ function createRoute(defaultGroup) {
   createRoute.points = [];
   const body = ensureEl("routeCreatorBody");
 
+  // ensure standard route groups exist in the DOM (may be absent on loaded saves)
+  const STANDARD_ROUTE_GROUPS = {
+    railways: {stroke: "#222222", "stroke-width": 0.6, "stroke-dasharray": "3 1", "stroke-linecap": "square", fill: "none", opacity: 0.7},
+    airways: {stroke: "#8899bb", "stroke-width": 0.35, "stroke-dasharray": "0.5 3", "stroke-linecap": "round", fill: "none", opacity: 0.5}
+  };
+  for (const [id, attrs] of Object.entries(STANDARD_ROUTE_GROUPS)) {
+    if (routes.select("#" + id).empty()) {
+      const g = routes.append("g").attr("id", id);
+      Object.entries(attrs).forEach(([k, v]) => g.attr(k, v));
+    }
+  }
+
   // update route groups
   ensureEl("routeCreatorGroupSelect").innerHTML = Array.from(routes.selectAll("g")._groups[0]).map(el => {
     const selected = defaultGroup || "roads";

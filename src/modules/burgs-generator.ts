@@ -28,6 +28,7 @@ export interface Burg {
   group?: string;
   link?: string;
   MFCG?: string;
+  airport?: number;
 }
 
 class BurgModule {

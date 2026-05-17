@@ -51,6 +51,7 @@ function insertEditorHtml() {
       <button id="statesLegend" data-tip="Toggle Legend box" class="icon-list-bullet"></button>
       <button id="statesPercentage" data-tip="Toggle percentage / absolute values views" class="icon-percent"></button>
       <button id="statesChart" data-tip="Show states bubble chart" class="icon-chart-area"></button>
+      <button id="statesAdvancedStats" data-tip="Show development stats" class="icon-info-circled"></button>
 
       <button id="statesRegenerate" data-tip="Show the regeneration menu and more data" class="icon-cog-alt"></button>
       <div id="statesRegenerateButtons" style="display: none">
@@ -102,6 +103,7 @@ function addListeners() {
   ensureEl("statesLegend").on("click", toggleLegend);
   ensureEl("statesPercentage").on("click", togglePercentageMode);
   ensureEl("statesChart").on("click", showStatesChart);
+  ensureEl("statesAdvancedStats").on("click", showStatesAdvancedStats);
   ensureEl("statesRegenerate").on("click", openRegenerationMenu);
   ensureEl("statesRegenerateBack").on("click", exitRegenerationMenu);
   ensureEl("statesRecalculate").on("click", () => recalculateStates(true));
@@ -231,6 +233,7 @@ function statesEditorAddLines() {
       data-cells=${s.cells}
       data-area=${area}
       data-population=${population}
+      data-urban=${urbanPct}
       data-burgs=${s.burgs}
       data-culture=${pack.cultures[s.culture].name}
       data-type=${s.type}
@@ -255,6 +258,8 @@ function statesEditorAddLines() {
       <div data-tip="State area" class="stateArea hide" style="width: 6em">${si(area)} ${unit}</div>
       <span data-tip="${populationTip}" class="icon-male hide"></span>
       <div data-tip="${populationTip}" class="statePopulation pointer hide" style="width: 5em">${si(population)}</div>
+      <span data-tip="Urban population percentage" class="icon-percent hide"></span>
+      <div data-tip="Urban: ${si(urban)} of ${si(population)} (${urbanPct}%)" class="stateUrbanPct hide" data-urban="${urbanPct}" style="width: 4em">${urbanPct}%</div>
       <select data-tip="State type. Defines growth model. Click to change" class="cultureType ${hidden} show hide">${getTypeOptions(
         s.type
       )}</select>
@@ -1532,4 +1537,69 @@ function updateLockStatus(stateId, classList) {
 
   classList.toggle("icon-lock-open");
   classList.toggle("icon-lock");
+}
+
+function showStatesAdvancedStats() {
+  const TIER_COLOR = {Advanced: "#2a7", Industrial: "#e90", "Pre-industrial": "#a44"};
+
+  const rows = pack.states
+    .filter(s => s && s.i && !s.removed)
+    .map(s => {
+      const d = Routes.getAdvancementDetails(s);
+      const rural = rn(s.rural * populationRate);
+      const urban = rn(s.urban * populationRate * urbanization);
+      const total = rural + urban;
+      const urbPct = total > 0 ? rn((urban / total) * 100) : 0;
+      const color = TIER_COLOR[d.tier] || "#888";
+      const bar = `<div style="display:inline-block;width:${d.score}px;max-width:100px;height:8px;background:${color};border-radius:2px;vertical-align:middle;margin-right:4px"></div>`;
+      return {s, d, urbPct, bar, color};
+    })
+    .sort((a, b) => b.d.score - a.d.score);
+
+  const tableRows = rows.map(({s, d, urbPct, bar, color}) => /* html */ `
+    <tr class="advStatsRow" data-id="${s.i}" style="cursor:pointer" title="Click to focus state">
+      <td style="padding:2px 6px"><fill-box fill="${s.color}"></fill-box> ${s.name}</td>
+      <td style="padding:2px 6px;white-space:nowrap">${bar}<b style="color:${color}">${d.score}</b></td>
+      <td style="padding:2px 6px;color:${color};font-weight:bold">${d.tier}</td>
+      <td style="padding:2px 6px;text-align:right">${urbPct}%</td>
+      <td style="padding:2px 6px;text-align:right">${d.urbScore}</td>
+      <td style="padding:2px 6px;text-align:right">${d.burgScore}</td>
+      <td style="padding:2px 6px;text-align:right">${d.popScore}</td>
+      <td style="padding:2px 6px;text-align:right">${d.formPts}</td>
+    </tr>`).join("");
+
+  const html = /* html */ `
+    <div style="max-height:70vh;overflow-y:auto">
+      <table style="border-collapse:collapse;font-size:0.85em;width:100%">
+        <thead>
+          <tr style="border-bottom:2px solid #ccc;text-align:left">
+            <th style="padding:4px 6px">State</th>
+            <th style="padding:4px 6px">Development</th>
+            <th style="padding:4px 6px">Tier</th>
+            <th style="padding:4px 6px" title="Urbanization rate">Urb%</th>
+            <th style="padding:4px 6px" title="Urbanization score (max 35)">Urb</th>
+            <th style="padding:4px 6px" title="Burg density score (max 20)">Burg</th>
+            <th style="padding:4px 6px" title="Population density score (max 20)">Pop</th>
+            <th style="padding:4px 6px" title="Form score (max 25)">Form</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
+
+  const $dlg = $("<div>").html(html).dialog({
+    title: "State Development",
+    resizable: false,
+    width: "auto",
+    position: {my: "center", at: "center", of: "#map"},
+    close() { $(this).dialog("destroy").remove(); }
+  });
+
+  $dlg.on("click", ".advStatsRow", function() {
+    const stateId = +this.dataset.id;
+    const state = pack.states[stateId];
+    if (!state) return;
+    const el = defs.select("#fog #focusState" + stateId);
+    zoomTo(state.pole[0], state.pole[1], 4, 1600);
+  });
 }

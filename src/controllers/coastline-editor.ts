@@ -142,10 +142,35 @@ const COAST_PRESETS: Record<string, Omit<CoastlineSettings, "enabled">> = {
 
 const PREVIEW_SEED = "preview_coastline";
 
+const HISTORY_KEY = "coastline";
+
+function pushCoastlineSnapshot(): void {
+  UndoRedo.push(HISTORY_KEY, { ...defaultCoastSettings });
+}
+
+function restoreCoastlineSnapshot(
+  snapshot: Record<string, number | boolean>,
+): void {
+  Object.assign(defaultCoastSettings, snapshot);
+  for (const { id, key } of SLIDER_DEFS) {
+    const val = defaultCoastSettings[key];
+    const slider = ensureEl<HTMLInputElement>(id);
+    const output = ensureEl(`${id}Out`);
+    slider.value = String(val);
+    output.textContent = String(val);
+  }
+  const enabledCb = ensureEl<HTMLInputElement>("coastEnabled");
+  enabledCb.checked = defaultCoastSettings.enabled as boolean;
+  updatePreviews();
+  drawFeatures();
+}
+
 export function open(): void {
   if (!document.getElementById("coastlineSettingsDialog")) {
     document.body.insertAdjacentHTML("beforeend", buildDialogHTML());
   }
+  UndoRedo.register(HISTORY_KEY);
+  pushCoastlineSnapshot();
 
   for (const { id, key } of SLIDER_DEFS) {
     const slider = ensureEl<HTMLInputElement>(id);
@@ -155,6 +180,7 @@ export function open(): void {
     const defaultVal = defaultCoastSettings[key] as number;
 
     slider.on("input", () => {
+      pushCoastlineSnapshot();
       const value = slider.valueAsNumber;
       defaultCoastSettings[key] = value;
       output.textContent = String(value);
@@ -163,6 +189,7 @@ export function open(): void {
     });
 
     resetBtn.on("click", () => {
+      pushCoastlineSnapshot();
       (defaultCoastSettings[key] as number) = defaultVal;
       slider.value = String(defaultVal);
       output.textContent = String(defaultVal);
@@ -190,6 +217,7 @@ export function open(): void {
 
   syncToggle();
   enabledCb.on("change", () => {
+    pushCoastlineSnapshot();
     defaultCoastSettings.enabled = enabledCb.checked;
     syncToggle();
     updatePreviews();
@@ -200,6 +228,7 @@ export function open(): void {
   for (const name of Object.keys(COAST_PRESETS)) {
     const btn = ensureEl<HTMLButtonElement>(`coastPreset_${name}`);
     btn.on("click", () => {
+      pushCoastlineSnapshot();
       const preset = COAST_PRESETS[name];
       for (const { id, key } of SLIDER_DEFS) {
         if (!(key in preset)) continue;
@@ -214,6 +243,25 @@ export function open(): void {
       drawFeatures();
     });
   }
+
+  // Undo/Redo buttons for coastline editor
+  const undoBtn = ensureEl<HTMLButtonElement>("coastUndo");
+  const redoBtn = ensureEl<HTMLButtonElement>("coastRedo");
+  const syncCoastButtons = () => {
+    undoBtn.disabled = !UndoRedo.canUndo(HISTORY_KEY);
+    redoBtn.disabled = !UndoRedo.canRedo(HISTORY_KEY);
+  };
+  undoBtn.on("click", () => {
+    const snapshot = UndoRedo.undo(HISTORY_KEY, { ...defaultCoastSettings });
+    if (snapshot) restoreCoastlineSnapshot(snapshot);
+    syncCoastButtons();
+  });
+  redoBtn.on("click", () => {
+    const snapshot = UndoRedo.redo(HISTORY_KEY, { ...defaultCoastSettings });
+    if (snapshot) restoreCoastlineSnapshot(snapshot);
+    syncCoastButtons();
+  });
+  syncCoastButtons();
 
   updatePreviews();
   closeDialogs("#culturesEditor, .stable");
@@ -266,6 +314,9 @@ function buildDialogHTML(): string {
         <div style="display:flex;align-items:center;gap:4px">
           <span style="color:#999;font-size:.85em">Preset</span>
           ${presetButtons}
+          <span style="width:1px;height:18px;background:#ddd;margin:0 4px"></span>
+          <button id="coastUndo" disabled data-tip="Undo (Ctrl+Z)" style="font-size:.78em;padding:2px 6px;cursor:pointer" class="icon-ccw"></button>
+          <button id="coastRedo" disabled data-tip="Redo (Ctrl+Shift+Z)" style="font-size:.78em;padding:2px 6px;cursor:pointer" class="icon-cw"></button>
         </div>
       </div>
       <div id="coastSliders">

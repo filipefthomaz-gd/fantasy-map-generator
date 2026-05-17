@@ -35,6 +35,7 @@ function handleKeyup(event) {
   else if (ctrl && code === "KeyS") saveMap("machine");
   else if (ctrl && code === "KeyC") saveMap("dropbox");
   else if (ctrl && code === "KeyZ" && undo?.offsetParent) undo.click();
+  else if (ctrl && shift && code === "KeyZ" && redo?.offsetParent) redo.click();
   else if (ctrl && code === "KeyY" && redo?.offsetParent) redo.click();
   else if ((shift || altShift) && code === "KeyH") editHeightmap();
   else if ((shift || altShift) && code === "KeyB") editBiomes();
@@ -46,6 +47,7 @@ function handleKeyup(event) {
   else if ((shift || altShift) && code === "KeyN") NamesbaseEditor.open();
   else if ((shift || altShift) && code === "KeyZ") editZones();
   else if ((shift || altShift) && code === "KeyR") editReligions();
+  else if ((shift || altShift) && code === "KeyW") openTravelCalculator();
   else if ((shift || altShift) && code === "KeyY") openEmblemEditor();
   else if ((shift || altShift) && code === "KeyQ") editUnits();
   else if ((shift || altShift) && code === "KeyI") openTimeline();
@@ -88,6 +90,7 @@ function handleKeyup(event) {
   else if (code === "KeyI") toggleBurgIcons();
   else if (code === "KeyM") toggleMilitary();
   else if (code === "KeyK") toggleMarkers();
+  else if (code === "Backquote") toggleResources();
   else if (code === "Equal" && !customization) toggleRulers();
   else if (code === "Slash") toggleScaleBar();
   else if (code === "BracketLeft" && !handleBracketSizeChange(code)) toggleVignette();

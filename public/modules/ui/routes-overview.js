@@ -7,6 +7,7 @@ function overviewRoutes() {
 
   const body = ensureEl("routesBody");
   routesOverviewAddLines();
+  renderGroupToggles();
   $("#routesOverview").dialog();
 
   if (modules.overviewRoutes) return;
@@ -20,12 +21,29 @@ function overviewRoutes() {
   });
 
   // add listeners
-  ensureEl("routesOverviewRefresh").on("click", routesOverviewAddLines);
+  ensureEl("routesOverviewRefresh").on("click", () => { renderGroupToggles(); routesOverviewAddLines(); });
   ensureEl("routesCreateNew").on("click", createRoute);
   ensureEl("routesExport").on("click", downloadRoutesData);
   ensureEl("routesLockAll").on("click", toggleLockAll);
   ensureEl("routesRemoveAll").on("click", triggerAllRoutesRemove);
   ensureEl("routesSearch").on("input", routesOverviewAddLines);
+
+  function renderGroupToggles() {
+    const container = ensureEl("routesGroupToggles");
+    container.innerHTML = "";
+    Array.from(routes.selectAll("g")._groups[0]).forEach(el => {
+      const isHidden = el.style.display === "none";
+      const chip = document.createElement("span");
+      chip.style.cssText = "display:inline-flex;align-items:center;gap:0.2em;padding:0.1em 0.5em;border:1px solid #aaa;border-radius:3px;cursor:pointer;font-size:smaller;opacity:" + (isHidden ? "0.45" : "1");
+      chip.innerHTML = `<i class="${isHidden ? "icon-eye-off" : "icon-eye"}"></i> ${el.id}`;
+      chip.title = (isHidden ? "Show" : "Hide") + " " + el.id;
+      chip.addEventListener("click", () => {
+        el.style.display = isHidden ? "" : "none";
+        renderGroupToggles();
+      });
+      container.appendChild(chip);
+    });
+  }
 
   // add line for each route
   function routesOverviewAddLines() {

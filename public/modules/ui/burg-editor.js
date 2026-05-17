@@ -90,6 +90,8 @@ function editBurg(id) {
     ensureEl("burgPlaza").classList.toggle("inactive", !b.plaza);
     ensureEl("burgTemple").classList.toggle("inactive", !b.temple);
     ensureEl("burgShanty").classList.toggle("inactive", !b.shanty);
+    ensureEl("burgStation").classList.toggle("inactive", !b.station);
+    ensureEl("burgAirport").classList.toggle("inactive", !b.airport);
 
     updateBurgLockIcon();
 

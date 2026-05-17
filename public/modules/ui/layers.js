@@ -816,9 +816,20 @@ function drawRoutes() {
     routePaths[group].push(`<path id="route${i}" d="${Routes.getPath(route)}"/>`);
   }
 
+  const ROUTE_GROUP_DEFAULTS = {
+    railways: {stroke: "#222222", "stroke-width": 0.6, "stroke-dasharray": "3 1", "stroke-linecap": "square", fill: "none", opacity: 0.7},
+    airways: {stroke: "#8899bb", "stroke-width": 0.35, "stroke-dasharray": "0.5 3", "stroke-linecap": "round", fill: "none", opacity: 0.5}
+  };
+
   routes.selectAll("path").remove();
   for (const group in routePaths) {
-    routes.select("#" + group).html(routePaths[group].join(""));
+    let sel = routes.select("#" + group);
+    if (sel.empty()) {
+      sel = routes.append("g").attr("id", group);
+      const defaults = ROUTE_GROUP_DEFAULTS[group];
+      if (defaults) Object.entries(defaults).forEach(([k, v]) => sel.attr(k, v));
+    }
+    sel.html(routePaths[group].join(""));
   }
 
   TIME && console.timeEnd("drawRoutes");
