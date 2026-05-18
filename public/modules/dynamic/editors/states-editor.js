@@ -221,6 +221,7 @@ function statesEditorAddLines() {
       continue;
     }
 
+    const urbanPct = population > 0 ? rn((urban / population) * 100) : 0;
     const capital = pack.burgs[s.capital].name;
     COArenderer.trigger("stateCOA" + s.i, s.coa);
     lines += /* html */ `<div
