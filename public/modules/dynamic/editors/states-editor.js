@@ -221,7 +221,6 @@ function statesEditorAddLines() {
       continue;
     }
 
-    const urbanPct = population > 0 ? rn((urban / population) * 100) : 0;
     const capital = pack.burgs[s.capital].name;
     COArenderer.trigger("stateCOA" + s.i, s.coa);
     lines += /* html */ `<div
@@ -234,7 +233,6 @@ function statesEditorAddLines() {
       data-cells=${s.cells}
       data-area=${area}
       data-population=${population}
-      data-urban=${urbanPct}
       data-burgs=${s.burgs}
       data-culture=${pack.cultures[s.culture].name}
       data-type=${s.type}
@@ -259,8 +257,6 @@ function statesEditorAddLines() {
       <div data-tip="State area" class="stateArea hide" style="width: 6em">${si(area)} ${unit}</div>
       <span data-tip="${populationTip}" class="icon-male hide"></span>
       <div data-tip="${populationTip}" class="statePopulation pointer hide" style="width: 5em">${si(population)}</div>
-      <span data-tip="Urban population percentage" class="icon-percent hide"></span>
-      <div data-tip="Urban: ${si(urban)} of ${si(population)} (${urbanPct}%)" class="stateUrbanPct hide" data-urban="${urbanPct}" style="width: 4em">${urbanPct}%</div>
       <select data-tip="State type. Defines growth model. Click to change" class="cultureType ${hidden} show hide">${getTypeOptions(
         s.type
       )}</select>
