@@ -76,6 +76,7 @@ toolsContent.addEventListener("click", function (event) {
   // click to create a new map buttons
   else if (button === "openSubmapTool") openSubmapTool();
   else if (button === "openTransformTool") openTransformTool();
+  else if (button === "openStateSubmapTool") openStateSubmapDialog();
 });
 
 function processFeatureRegeneration(event, button) {

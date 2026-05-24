@@ -2322,6 +2322,7 @@
           <div class="grid">
             <button id="openSubmapTool" data-tip="Click to generate a submap from the current viewport">Submap</button>
             <button id="openTransformTool" data-tip="Click to transform the map">Transform</button>
+            <button id="openStateSubmapTool" data-tip="Click to generate a detailed submap of a single state">State</button>
           </div>
         </div>
 
@@ -2922,7 +2923,7 @@
 
           <div data-tip="River width multiplier. Default value is 1">
             <div class="label">Width modifier:</div>
-            <input id="riverWidthFactor" type="number" min=".1" max="4" step=".1" />
+            <input id="riverWidthFactor" type="number" min="1" max="2" step=".1" />
           </div>
         </div>
 
@@ -6083,6 +6084,26 @@
         </div>
       </div>
 
+      <div id="stateSubmapTool" style="display: none" class="dialog">
+        <p style="font-weight: bold">
+          This operation is destructive and irreversible. It will create a new map zoomed into the selected state.
+          Save your .map file first!
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 0.5em">
+          <div data-tip="Select the state to zoom into" style="display: flex; gap: 1em; align-items: center">
+            <div>State</div>
+            <select id="stateSubmapSelect" style="flex: 1"></select>
+          </div>
+          <div data-tip="Set points (cells) number of the submap" style="display: flex; gap: 1em">
+            <div>Points number</div>
+            <div>
+              <input id="stateSubmapPointsInput" type="range" min="1" max="13" value="4" />
+              <output id="stateSubmapPointsFormatted" style="color: #053305">10K</output>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="transformTool" style="display: none" class="dialog">
         <div style="padding-top: 0.5em; width: 40em; font-weight: bold">
           This operation is destructive and irreversible. It will create a completely new map based on the current one.
@@ -8696,7 +8717,7 @@
 
     <script defer src="modules/ui/style.js?v=1.122.0"></script>
     <script defer src="modules/ui/editors.js?v=1.120.5"></script>
-    <script defer src="modules/ui/tools.js?v=1.120.5"></script>
+    <script defer src="modules/ui/tools.js?v=1.120.6"></script>
     <script defer src="modules/ui/world-configurator.js?v=1.120.5"></script>
     <script defer src="modules/ui/heightmap-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/provinces-editor.js?v=1.120.5"></script>
@@ -8734,7 +8755,7 @@
     <script defer src="modules/ui/emblems-editor.js?v=1.99.00"></script>
     <script defer src="modules/ui/markers-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/3d.js?v=1.99.00"></script>
-    <script defer src="modules/ui/submap-tool.js?v=1.120.5"></script>
+    <script defer src="modules/ui/submap-tool.js?v=1.120.7"></script>
     <script defer src="modules/ui/transform-tool.js?v=1.120.5"></script>
     <script defer src="modules/ui/hotkeys.js?v=1.120.5"></script>
     <script defer src="libs/rgbquant.min.js"></script>

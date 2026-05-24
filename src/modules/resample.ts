@@ -53,7 +53,6 @@ class Resampler {
   private resamplePrimaryGridData(
     parentMap: ParentMapDefinition,
     inverse: (x: number, y: number) => [number, number],
-    scale: number,
   ) {
     grid.cells.h = new Uint8Array(grid.points.length);
     grid.cells.temp = new Int8Array(grid.points.length);
@@ -73,7 +72,24 @@ class Resampler {
       grid.cells.prec[newGridCell] = parentMap.grid.cells.prec[parentGridCell];
     });
 
-    if (scale >= 2) this.smoothHeightmap();
+  }
+
+  private addHeightVariation(scale: number) {
+    const maxAmplitude = Math.min(12, Math.round(4 * Math.log2(scale) + 1));
+    grid.cells.h.forEach((_: number, cell: number) => {
+      const current = grid.cells.h[cell];
+      if (isWater(cell, grid)) {
+        // water stays essentially flat — just enough to vary depth slightly
+        const noise = Math.round((Math.random() * 2 - 1));
+        grid.cells.h[cell] = Math.max(0, Math.min(19, current + noise));
+        return;
+      }
+      // land: amplitude scales with elevation so lowlands stay flat, mountains get rough
+      const heightFactor = 0.1 + 0.9 * ((current - 20) / 80);
+      const amplitude = Math.round(maxAmplitude * heightFactor);
+      const noise = Math.round((Math.random() * 2 - 1) * amplitude);
+      grid.cells.h[cell] = Math.max(20, Math.min(100, current + noise));
+    });
   }
 
   private groupCellsByType(graph: PackedGraph) {
@@ -170,7 +186,7 @@ class Resampler {
           pack.cells.r[cellId] = river.i;
         });
 
-        const widthFactor = river.widthFactor * scale;
+        const widthFactor = Math.min(2, Math.max(1, river.widthFactor * scale));
         delete river.meanderedPoints;
         return {
           ...river,
@@ -505,7 +521,11 @@ class Resampler {
     pack = {} as PackedGraph;
     notes = parentMap.notes;
 
-    this.resamplePrimaryGridData(parentMap, inverse, scale);
+    this.resamplePrimaryGridData(parentMap, inverse);
+    if (scale >= 2) {
+      this.addHeightVariation(scale);
+      this.smoothHeightmap();
+    }
 
     Features.markupGrid();
     addLakesInDeepDepressions();
