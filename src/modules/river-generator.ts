@@ -1,5 +1,5 @@
 import Alea from "alea";
-import { curveBasis, curveCatmullRom, line, mean, min, sum } from "d3";
+import { curveBasis, curveCatmullRom, line, min, sum } from "d3";
 import { each, rn, round, rw } from "../utils";
 import type { Point } from "./voronoi";
 
@@ -125,9 +125,9 @@ class RiverModule {
         // downhill cell (make sure it's not in the source lake)
         let min = null;
         if (lakeOutCells[i]) {
+          const lakeFeatureIds = new Set<number>(lakes.map((lake: any) => lake.i));
           const filtered = cells.c[i].filter(
-            (c: number) =>
-              !lakes.map((lake: any) => lake.i).includes(cells.f[c]),
+            (c: number) => !lakeFeatureIds.has(cells.f[c]),
           );
           min = filtered.sort((a: number, b: number) => h[a] - h[b])[0];
         } else if (cells.haven[i]) {
@@ -291,15 +291,14 @@ class RiverModule {
       for (const i of cells.i) {
         if (!cells.conf[i]) continue;
 
-        const sortedInflux = cells.c[i]
-          .filter((c: number) => cells.r[c] && h[c] > h[i])
-          .map((c: number) => cells.fl[c])
-          .sort((a: number, b: number) => b - a);
-        cells.conf[i] = sortedInflux.reduce(
-          (acc: number, flux: number, index: number) =>
-            index ? acc + flux : acc,
-          0,
-        );
+        let total = 0, maxFlux = 0;
+        for (const c of cells.c[i]) {
+          if (!cells.r[c] || h[c] <= h[i]) continue;
+          const flux = cells.fl[c];
+          total += flux;
+          if (flux > maxFlux) maxFlux = flux;
+        }
+        cells.conf[i] = total - maxFlux;
       }
     };
 
@@ -333,7 +332,10 @@ class RiverModule {
     };
     return Array.from(h).map((h, i) => {
       if (h < 20 || t[i] < 1) return h;
-      return h + t[i] / 100 + (mean(c[i].map((c) => t[c])) as number) / 10000;
+      const neighbors = c[i];
+      let tSum = 0;
+      for (const n of neighbors) tSum += t[n];
+      return h + t[i] / 100 + tSum / neighbors.length / 10000;
     });
   }
 

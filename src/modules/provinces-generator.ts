@@ -207,24 +207,27 @@ class ProvinceModule {
       if (cells.burg[i]) continue; // do not overwrite burgs
       if (isProvinceCellLocked(i)) continue; // do not overwrite cell of locked provinces
 
-      const neibs = cells.c[i]
-        .filter(
-          (c) => cells.state[c] === cells.state[i] && !isProvinceCellLocked(c),
-        )
-        .map((c) => provinceIds[c]);
-      const adversaries = neibs.filter((c) => c !== provinceIds[i]);
+      const stateI = cells.state[i];
+      const currProv = provinceIds[i];
+      const adversaries: number[] = [];
+      let buddyCount = 0;
+      for (const c of cells.c[i]) {
+        if (cells.state[c] !== stateI || isProvinceCellLocked(c)) continue;
+        const prov = provinceIds[c];
+        if (prov === currProv) buddyCount++;
+        else adversaries.push(prov);
+      }
       if (adversaries.length < 2) continue;
+      if (buddyCount > 2) continue;
 
-      const buddies = neibs.filter((c) => c === provinceIds[i]).length;
-      if (buddies > 2) continue;
+      const counts = new Map<number, number>();
+      for (const p of adversaries) counts.set(p, (counts.get(p) ?? 0) + 1);
+      const maxCount = max(Array.from(counts.values())) as number;
+      if (buddyCount >= maxCount) continue;
 
-      const competitors = adversaries.map((p) =>
-        adversaries.reduce((s, v) => (v === p ? s + 1 : s), 0),
-      );
-      const maxBuddies = max(competitors) as number;
-      if (buddies >= maxBuddies) continue;
-
-      provinceIds[i] = adversaries[competitors.indexOf(maxBuddies)];
+      for (const [p, c] of counts) {
+        if (c === maxCount) { provinceIds[i] = p; break; }
+      }
     }
 
     // add "wild" provinces if some cells don't have a province assigned

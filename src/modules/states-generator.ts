@@ -243,20 +243,17 @@ class StatesModule {
       if (cells.h[i] < 20 || cells.burg[i]) continue; // do not overwrite burgs
       if (pack.states[cells.state[i]]?.lock) continue; // do not overwrite cells of locks states
       if (cells.c[i].some((c) => burgs[cells.burg[c]].capital)) continue; // do not overwrite near capital
-      const neibs = cells.c[i].filter((c) => cells.h[c] >= 20);
-      const adversaries = neibs.filter(
-        (c) =>
-          !pack.states[cells.state[c]]?.lock &&
-          cells.state[c] !== cells.state[i],
-      );
+      const stateI = cells.state[i];
+      const adversaries: number[] = [];
+      let buddyCount = 0;
+      for (const c of cells.c[i]) {
+        if (cells.h[c] < 20 || pack.states[cells.state[c]]?.lock) continue;
+        if (cells.state[c] === stateI) buddyCount++;
+        else adversaries.push(c);
+      }
       if (adversaries.length < 2) continue;
-      const buddies = neibs.filter(
-        (c) =>
-          !pack.states[cells.state[c]]?.lock &&
-          cells.state[c] === cells.state[i],
-      );
-      if (buddies.length > 2) continue;
-      if (adversaries.length <= buddies.length) continue;
+      if (buddyCount > 2) continue;
+      if (adversaries.length <= buddyCount) continue;
       cells.state[i] = cells.state[adversaries[0]];
     }
     TIME && console.timeEnd("normalizeStates");

@@ -35,22 +35,35 @@ export class Voronoi {
     // Half-edges are the indices into the delaunator outputs:
     // delaunay.triangles[e] gives the point ID where the half-edge starts
     // delaunay.halfedges[e] returns either the opposite half-edge in the adjacent triangle, or -1 if there's not an adjacent triangle.
-    for (let e = 0; e < this.delaunay.triangles.length; e++) {
-      const p = this.delaunay.triangles[this.nextHalfedge(e)];
+    const { triangles, halfedges } = this.delaunay;
+    for (let e = 0; e < triangles.length; e++) {
+      const nextE = e % 3 === 2 ? e - 2 : e + 1;
+      const p = triangles[nextE];
       if (p < this.pointsN && !this.cells.c[p]) {
         const edges = this.edgesAroundPoint(e);
-        this.cells.v[p] = edges.map((e) => this.triangleOfEdge(e)); // cell: adjacent vertex
-        this.cells.c[p] = edges
-          .map((e) => this.delaunay.triangles[e])
-          .filter((c) => c < this.pointsN); // cell: adjacent valid cells
-        this.cells.b[p] = edges.length > this.cells.c[p].length ? 1 : 0; // cell: is border
+        this.cells.v[p] = edges.map((e) => Math.floor(e / 3)); // cell: adjacent vertex
+        const adjCells: number[] = [];
+        for (const edge of edges) {
+          const c = triangles[edge];
+          if (c < this.pointsN) adjCells.push(c);
+        }
+        this.cells.c[p] = adjCells; // cell: adjacent valid cells
+        this.cells.b[p] = edges.length > adjCells.length ? 1 : 0; // cell: is border
       }
 
-      const t = this.triangleOfEdge(e);
+      const t = Math.floor(e / 3);
       if (!this.vertices.p[t]) {
-        this.vertices.p[t] = this.triangleCenter(t); // vertex: coordinates
-        this.vertices.v[t] = this.trianglesAdjacentToTriangle(t); // vertex: adjacent vertices
-        this.vertices.c[t] = this.pointsOfTriangle(t); // vertex: adjacent cells
+        const e0 = 3 * t;
+        const p0 = this.points[triangles[e0]];
+        const p1 = this.points[triangles[e0 + 1]];
+        const p2 = this.points[triangles[e0 + 2]];
+        this.vertices.p[t] = this.circumcenter(p0, p1, p2); // vertex: coordinates
+        this.vertices.v[t] = [
+          Math.floor(halfedges[e0] / 3),
+          Math.floor(halfedges[e0 + 1] / 3),
+          Math.floor(halfedges[e0 + 2] / 3),
+        ]; // vertex: adjacent vertices
+        this.vertices.c[t] = [triangles[e0], triangles[e0 + 1], triangles[e0 + 2]]; // vertex: adjacent cells
       }
     }
   }
