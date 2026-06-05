@@ -104,6 +104,7 @@ function prepareMapData() {
   const routes = JSON.stringify(pack.routes);
   const zones = JSON.stringify(pack.zones);
   const ice = JSON.stringify(pack.ice);
+  const continents = pack.continents ? JSON.stringify(pack.continents) : "";
 
   // store name array only if not the same as default
   const defaultNB = Names.getNameBases();
@@ -160,7 +161,8 @@ function prepareMapData() {
     zones,
     ice,
     JSON.stringify(mapTimeline),
-    pack.cells.resource ? Array.from(pack.cells.resource).join(",") : ""
+    pack.cells.resource ? Array.from(pack.cells.resource).join(",") : "",
+    continents
   ].join("\r\n");
   return mapData;
 }

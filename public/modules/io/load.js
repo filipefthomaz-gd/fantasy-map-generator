@@ -404,6 +404,7 @@ async function parseLoadedData(data, mapVersion) {
       reGraph();
       Features.markupPack();
       pack.features = JSON.parse(data[12]);
+      Features.resolveInnerIslands();
       pack.cultures = JSON.parse(data[13]);
       pack.states = JSON.parse(data[14]);
       pack.burgs = JSON.parse(data[15]);
@@ -433,6 +434,13 @@ async function parseLoadedData(data, mapVersion) {
         pack.cells.resource = Uint8Array.from(data[41].split(","));
       } else {
         assignResources(); // compute from current map data for older saves
+      }
+
+      if (data[42]) {
+        pack.continents = JSON.parse(data[42]);
+        Continents.deriveCells();
+      } else {
+        Continents.generate();
       }
 
       if (data[31]) {
@@ -477,7 +485,7 @@ async function parseLoadedData(data, mapVersion) {
       if (isVisible(borders) && hasChild(borders, "path")) turnOn("toggleBorders");
       if (isVisible(routes) && hasChild(routes, "path")) turnOn("toggleRoutes");
       if (hasChildren(temperature)) turnOn("toggleTemperature");
-      if (hasChild(population, "line")) turnOn("togglePopulation");
+      if (hasChild(population, "path") || hasChild(population, "line")) turnOn("togglePopulation");
       if (isVisible(ice)) turnOn("toggleIce");
       if (hasChild(prec, "circle")) turnOn("togglePrecipitation");
       if (isVisible(emblems) && hasChild(emblems, "use")) turnOn("toggleEmblems");

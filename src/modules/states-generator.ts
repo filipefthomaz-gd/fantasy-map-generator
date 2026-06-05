@@ -266,7 +266,23 @@ class StatesModule {
 
     pack.states.forEach((s) => {
       if (!s.i || s.removed) return;
-      s.pole = poles[s.i] || [0, 0];
+      if (poles[s.i]) {
+        s.pole = poles[s.i];
+        return;
+      }
+      // Fallback: use the capital or the centroid of the state's cells.
+      // [0,0] would push the label to the map corner where it appears to vanish.
+      const capital = pack.burgs[s.capital];
+      if (capital && !capital.removed) {
+        s.pole = [capital.x, capital.y];
+        return;
+      }
+      const stateCells = pack.cells.i.filter((i: number) => pack.cells.state[i] === s.i);
+      if (stateCells.length) {
+        const xs = stateCells.map((i: number) => pack.cells.p[i][0]);
+        const ys = stateCells.map((i: number) => pack.cells.p[i][1]);
+        s.pole = [xs.reduce((a: number, b: number) => a + b, 0) / xs.length, ys.reduce((a: number, b: number) => a + b, 0) / ys.length];
+      }
     });
   }
 

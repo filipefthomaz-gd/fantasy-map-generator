@@ -1,5 +1,6 @@
 import type { Quadtree } from "d3";
 import type { Burg } from "../modules/burgs-generator";
+import type { Continent } from "../modules/continents-generator";
 import type { Culture } from "../modules/cultures-generator";
 import type { PackedGraphFeature } from "../modules/features";
 import type { Province } from "../modules/provinces-generator";
@@ -45,6 +46,7 @@ export interface PackedGraph {
     area: TypedArray; // cell area (planar, pixel units)
     latCosine?: Float32Array; // cos(latitude) per cell, for spherical area correction
     province: TypedArray; // cell province id
+    continent?: TypedArray; // cell continent id
     routes: Record<number, Record<number, number>>;
   };
   vertices: {
@@ -60,6 +62,7 @@ export interface PackedGraph {
   burgs: Burg[];
   states: State[];
   cultures: Culture[];
+  continents: Continent[];
   routes: Route[];
   religions: any[];
   zones: Zone[];

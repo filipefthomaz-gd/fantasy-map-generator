@@ -203,6 +203,7 @@ export function resolveVersionConflicts(mapVersion) {
     lakes.selectAll("path").remove();
 
     Features.markupPack();
+    Features.resolveInnerIslands();
     createDefaultRuler();
   }
 

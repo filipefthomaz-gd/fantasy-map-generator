@@ -602,6 +602,13 @@
               <u>C</u>ultures
             </li>
             <li
+              id="toggleContinents"
+              data-tip="Continents: click to toggle, drag to raise or lower the layer. Ctrl + click to edit layer style"
+              onclick="toggleContinents(event)"
+            >
+              Continents
+            </li>
+            <li
               id="toggleStates"
               data-tip="States: click to toggle, drag to raise or lower the layer. Ctrl + click to edit layer style"
               data-shortcut="S"
@@ -2151,6 +2158,9 @@
             </button>
             <button id="editCulturesButton" data-tip="Click to open Cultures Editor" data-shortcut="Shift + C">
               Cultures
+            </button>
+            <button id="editContinentsButton" data-tip="Click to open Continents Editor">
+              Continents
             </button>
             <button
               id="editDiplomacyButton"
@@ -5647,12 +5657,12 @@
           <div>
             <div style="margin-bottom:0.2em">From</div>
             <input id="travelFromSearch" type="search" placeholder="Filter burgs…" style="width:12em; display:block; margin-bottom:0.2em" />
-            <select id="travelFrom" size="6" style="width:12em; display:block"></select>
+            <select id="travelFrom" size="14" style="width:12em; display:block; height:18em"></select>
           </div>
           <div>
             <div style="margin-bottom:0.2em">To</div>
             <input id="travelToSearch" type="search" placeholder="Filter burgs…" style="width:12em; display:block; margin-bottom:0.2em" />
-            <select id="travelTo" size="6" style="width:12em; display:block"></select>
+            <select id="travelTo" size="14" style="width:12em; display:block; height:18em"></select>
           </div>
         </div>
         <div style="margin:0.4em 0">
@@ -5671,6 +5681,15 @@
             <tbody id="travelTableBody"></tbody>
           </table>
           <div id="travelNote" style="font-size:0.85em; margin-top:0.5em; opacity:0.6"></div>
+        </div>
+
+        <div style="margin-top:0.8em; border-top:1px solid rgba(255,255,255,0.15); padding-top:0.6em">
+          <button id="toggleHubViewBtn" style="font-size:0.9em">&#x2708; Flight Hub</button>
+        </div>
+        <div id="hubViewSection" style="display:none; margin-top:0.6em">
+          <div style="margin-bottom:0.3em; font-size:0.9em; opacity:0.7">Airport</div>
+          <select id="hubAirportSelect" style="width:100%; display:block; margin-bottom:0.5em"></select>
+          <div id="hubResults"></div>
         </div>
       </div>
 

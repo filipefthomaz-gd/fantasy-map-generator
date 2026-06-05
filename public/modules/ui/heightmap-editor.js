@@ -233,6 +233,7 @@ function editHeightmap(options) {
     generatePrecipitation();
     reGraph();
     Features.markupPack();
+    Features.resolveInnerIslands();
 
     Rivers.generate(erosionAllowed);
 
@@ -352,6 +353,7 @@ function editHeightmap(options) {
     generatePrecipitation();
     reGraph();
     Features.markupPack();
+    Features.resolveInnerIslands();
 
     if (erosionAllowed) {
       Rivers.generate(true);

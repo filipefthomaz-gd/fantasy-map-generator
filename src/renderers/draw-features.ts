@@ -35,8 +35,12 @@ const featuresRenderer = (): void => {
   for (const feature of pack.features) {
     if (!feature || feature.type === "ocean") continue;
 
+    const fillRule =
+      feature.type === "lake" && feature.innerIslands?.length
+        ? ' fill-rule="evenodd"'
+        : "";
     html.paths.push(
-      `<path d="${featurePathRenderer(feature)}" id="feature_${feature.i}" data-f="${feature.i}"></path>`,
+      `<path d="${featurePathRenderer(feature)}" id="feature_${feature.i}" data-f="${feature.i}"${fillRule}></path>`,
     );
 
     if (feature.type === "lake") {
@@ -96,7 +100,22 @@ function featurePathRenderer(feature: PackedGraphFeature): string {
   const simplifiedPoints = simplify(points, 0.3);
   const clippedPoints = clipPoly(simplifiedPoints, graphWidth, graphHeight, 1);
   const shape = fractalizeCoastline(clippedPoints, feature.i, feature.type);
-  return `${round(buildCoastlinePath(shape))}Z`;
+  let path = `${round(buildCoastlinePath(shape))}Z`;
+
+  if (feature.innerIslands?.length) {
+    for (const islandId of feature.innerIslands) {
+      const island = pack.features[islandId];
+      if (!island?.vertices?.length) continue;
+      const islandPoints = island.vertices.map((v: number) => pack.vertices.p[v]);
+      if (islandPoints.some((p: unknown) => p === undefined)) continue;
+      const simplifiedIsland = simplify(islandPoints, 0.3);
+      const clippedIsland = clipPoly(simplifiedIsland, graphWidth, graphHeight, 1);
+      const islandShape = fractalizeCoastline(clippedIsland, island.i, island.type);
+      path += `${round(buildCoastlinePath(islandShape))}Z`;
+    }
+  }
+
+  return path;
 }
 
 window.drawFeatures = featuresRenderer;

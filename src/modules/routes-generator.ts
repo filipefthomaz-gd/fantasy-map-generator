@@ -753,13 +753,17 @@ class RoutesModule {
 
     const airportsByState: Record<number, any[]> = {};
 
-    // Collect airports for qualifying states (manual flag or high-population/capital burgs)
+    // Collect airports: only the state capital + manually flagged burgs.
+    // This keeps airports rare — smaller states have one hub, bigger ones accumulate
+    // manual airports where it makes sense.
     for (const state of qualifyingStates) {
-      const airports = pack.burgs.filter(
-        (b: any) =>
-          b && b.i && !b.removed && b.state === state.i &&
-          (b.airport === 1 || b.capital === 1 || (b.population ?? 0) > 5),
-      );
+      const airports: any[] = [];
+      const capital = pack.burgs[state.capital];
+      if (capital && !capital.removed) airports.push(capital);
+      for (const b of pack.burgs) {
+        if (b && b.i && !b.removed && b.state === state.i && b.airport === 1 && b.i !== state.capital)
+          airports.push(b);
+      }
       if (airports.length >= 1) airportsByState[state.i] = airports;
     }
 
@@ -783,7 +787,7 @@ class RoutesModule {
       });
     }
 
-    // Connect manually-set airports from non-qualifying states globally (air routes cross borders).
+    // Connect manually-set airports from non-qualifying states globally.
     const manualAirports = pack.burgs.filter(
       (b: any) => b && b.i && !b.removed && b.airport === 1 && !qualifyingStateIds.has(b.state),
     );
@@ -801,25 +805,40 @@ class RoutesModule {
       });
     }
 
-    // Cross-border airways: Allied or Friendly qualifying states
+    // Cross-border airways: Allied or Friendly qualifying states.
+    // Cap at MAX_INTERNATIONAL connections per state, picking the closest pairs first,
+    // so each capital is a hub for a small number of international routes.
+    const MAX_INTERNATIONAL = 2;
+    const crossBorderCounts: Record<number, number> = {};
+
+    const pairs: Array<{ai: number; bi: number; dist: number}> = [];
     for (let ai = 0; ai < qualifyingStates.length; ai++) {
       const stateA = qualifyingStates[ai];
       if (!airportsByState[stateA.i]) continue;
+      const capA = pack.burgs[stateA.capital];
+      if (!capA || capA.removed) continue;
       for (let bi = ai + 1; bi < qualifyingStates.length; bi++) {
         const stateB = qualifyingStates[bi];
         if (!airportsByState[stateB.i]) continue;
         const rel = (stateA.diplomacy as string[] | undefined)?.[stateB.i] ?? "Neutral";
         if (rel !== "Ally" && rel !== "Friendly") continue;
-
-        const capA = pack.burgs[stateA.capital];
         const capB = pack.burgs[stateB.capital];
-        if (!capA || !capB || capA.removed || capB.removed) continue;
-
-        airways.push({
-          feature: capA.feature as number,
-          cells: [capA.cell!, capB.cell!],
-        } as Route);
+        if (!capB || capB.removed) continue;
+        pairs.push({ai, bi, dist: Math.hypot(capA.x - capB.x, capA.y - capB.y)});
       }
+    }
+    pairs.sort((a, b) => a.dist - b.dist);
+
+    for (const {ai, bi} of pairs) {
+      const stateA = qualifyingStates[ai];
+      const stateB = qualifyingStates[bi];
+      if ((crossBorderCounts[stateA.i] ?? 0) >= MAX_INTERNATIONAL) continue;
+      if ((crossBorderCounts[stateB.i] ?? 0) >= MAX_INTERNATIONAL) continue;
+      const capA = pack.burgs[stateA.capital];
+      const capB = pack.burgs[stateB.capital];
+      airways.push({feature: capA.feature as number, cells: [capA.cell!, capB.cell!]} as Route);
+      crossBorderCounts[stateA.i] = (crossBorderCounts[stateA.i] ?? 0) + 1;
+      crossBorderCounts[stateB.i] = (crossBorderCounts[stateB.i] ?? 0) + 1;
     }
 
     TIME && console.timeEnd("generateAirwayRoutes");
@@ -915,11 +934,11 @@ class RoutesModule {
 
     return routesMerged > 1 ? this.mergeRoutes(routes) : routes;
   }
-  private createRoutesData(routes: Route[], connections: Map<string, boolean>) {
+  private createRoutesData(routes: Route[], connections: Map<string, boolean>, pointsArray?: Point[]) {
     const mainRoads = this.generateMainRoads(connections);
     const trails = this.generateTrails(connections);
     const seaRoutes = this.generateSeaRoutes(connections);
-    const pointsArray = this.preparePointsArray();
+    if (!pointsArray) pointsArray = this.preparePointsArray();
 
     for (const { feature, cells, merged } of this.mergeRoutes(mainRoads)) {
       if (merged) continue;
@@ -943,29 +962,29 @@ class RoutesModule {
   }
 
   generate(lockedRoutes: Route[] = []) {
+    const pointsArray = this.preparePointsArray();
+
     const connections = new Map<string, boolean>();
     lockedRoutes.forEach((route: Route) => {
       this.addConnections(route.points.map((p) => p[2]), connections);
     });
 
-    pack.routes = this.createRoutesData(lockedRoutes, connections);
+    pack.routes = this.createRoutesData(lockedRoutes, connections, pointsArray);
 
     // Railways
     const lockedRailways = lockedRoutes.filter((r) => r.group === "railways");
     const railConnections = new Map<string, boolean>();
     lockedRailways.forEach((r) => this.addConnections(r.points.map((p) => p[2]), railConnections));
-    const railPointsArray = this.preparePointsArray();
     for (const { feature, cells, merged } of this.mergeRoutes(this.generateRailwayRoutes(railConnections))) {
       if (merged) continue;
-      const points = this.getPoints("railways", cells!, railPointsArray);
+      const points = this.getPoints("railways", cells!, pointsArray);
       pack.routes.push({ i: pack.routes.length, group: "railways", feature, points } as Route);
     }
 
     // Airways
-    const airPointsArray = this.preparePointsArray();
     for (const { feature, cells, merged } of this.generateAirwayRoutes()) {
       if (merged) continue;
-      const points = this.getPoints("airways", cells!, airPointsArray);
+      const points = this.getPoints("airways", cells!, pointsArray);
       pack.routes.push({ i: pack.routes.length, group: "airways", feature, points } as Route);
     }
 
@@ -1136,13 +1155,28 @@ class RoutesModule {
   }
 
   getPath({ group, points }: { group: string; points: number[][] }): string {
+    if (group === "airways") {
+      // Great-circle-style arc: quadratic bezier between endpoints, ignoring terrain cells
+      const [x1, y1] = points[0];
+      const [x2, y2] = points[points.length - 1];
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.001) return "";
+      // Offset control point 18% of distance, perpendicular (90° CCW) to give a left-arcing curve
+      const f = 0.18;
+      const cx = (x1 + x2) / 2 - (dy / dist) * dist * f;
+      const cy = (y1 + y2) / 2 + (dx / dist) * dist * f;
+      const r = (v: number) => Math.round(v * 10) / 10;
+      return `M${r(x1)},${r(y1)} Q${r(cx)},${r(cy)} ${r(x2)},${r(y2)}`;
+    }
+
     const lineGen = line();
     const ROUTE_CURVES: Record<string, any> = {
       roads: curveCatmullRom.alpha(0.1),
       trails: curveCatmullRom.alpha(0.1),
       searoutes: curveCatmullRom.alpha(0.5),
       railways: curveCatmullRom.alpha(0.1),
-      airways: curveCatmullRom.alpha(0.5),
       default: curveCatmullRom.alpha(0.1),
     };
     lineGen.curve(ROUTE_CURVES[group] || ROUTE_CURVES.default);

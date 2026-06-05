@@ -1549,18 +1549,21 @@ function showStatesAdvancedStats() {
       const urban = rn(s.urban * populationRate * urbanization);
       const total = rural + urban;
       const urbPct = total > 0 ? rn((urban / total) * 100) : 0;
+      const area = getArea(s.area);
+      const density = area > 0 ? rn(total / area) : 0;
       const color = TIER_COLOR[d.tier] || "#888";
       const bar = `<div style="display:inline-block;width:${d.score}px;max-width:100px;height:8px;background:${color};border-radius:2px;vertical-align:middle;margin-right:4px"></div>`;
-      return {s, d, urbPct, bar, color};
+      return {s, d, urbPct, bar, color, density};
     })
     .sort((a, b) => b.d.score - a.d.score);
 
-  const tableRows = rows.map(({s, d, urbPct, bar, color}) => /* html */ `
+  const tableRows = rows.map(({s, d, urbPct, bar, color, density}) => /* html */ `
     <tr class="advStatsRow" data-id="${s.i}" style="cursor:pointer" title="Click to focus state">
       <td style="padding:2px 6px"><fill-box fill="${s.color}"></fill-box> ${s.name}</td>
       <td style="padding:2px 6px;white-space:nowrap">${bar}<b style="color:${color}">${d.score}</b></td>
       <td style="padding:2px 6px;color:${color};font-weight:bold">${d.tier}</td>
       <td style="padding:2px 6px;text-align:right">${urbPct}%</td>
+      <td style="padding:2px 6px;text-align:right">${density}</td>
       <td style="padding:2px 6px;text-align:right">${d.urbScore}</td>
       <td style="padding:2px 6px;text-align:right">${d.burgScore}</td>
       <td style="padding:2px 6px;text-align:right">${d.popScore}</td>
@@ -1576,6 +1579,7 @@ function showStatesAdvancedStats() {
             <th style="padding:4px 6px">Development</th>
             <th style="padding:4px 6px">Tier</th>
             <th style="padding:4px 6px" title="Urbanization rate">Urb%</th>
+            <th style="padding:4px 6px" title="Population density (pop per area unit)">Density</th>
             <th style="padding:4px 6px" title="Urbanization score (max 35)">Urb</th>
             <th style="padding:4px 6px" title="Burg density score (max 20)">Burg</th>
             <th style="padding:4px 6px" title="Population density score (max 20)">Pop</th>

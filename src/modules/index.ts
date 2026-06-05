@@ -5,6 +5,7 @@ import "./features";
 import "./names-generator";
 import "./ocean-layers";
 import "./lakes";
+import "./continents-generator";
 import "./river-generator";
 import "./burgs-generator";
 import "./biomes";

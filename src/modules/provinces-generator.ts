@@ -388,7 +388,21 @@ class ProvinceModule {
 
     pack.provinces.forEach((province) => {
       if (!province.i || province.removed) return;
-      province.pole = poles[province.i] || [0, 0];
+      if (poles[province.i]) {
+        province.pole = poles[province.i];
+        return;
+      }
+      const capital = pack.burgs[province.burg];
+      if (capital && !capital.removed) {
+        province.pole = [capital.x, capital.y];
+        return;
+      }
+      const cells = pack.cells.i.filter((i: number) => pack.cells.province[i] === province.i);
+      if (cells.length) {
+        const xs = cells.map((i: number) => pack.cells.p[i][0]);
+        const ys = cells.map((i: number) => pack.cells.p[i][1]);
+        province.pole = [xs.reduce((a: number, b: number) => a + b, 0) / xs.length, ys.reduce((a: number, b: number) => a + b, 0) / ys.length];
+      }
     });
   }
 }

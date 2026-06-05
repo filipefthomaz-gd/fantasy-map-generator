@@ -65,8 +65,31 @@ class Measurer {
     return rn((1 / scale ** 0.3) * 2, 2);
   }
 
+  getPointRadius() {
+    return rn(4 / scale ** 0.5, 2);
+  }
+
   getDash() {
     return rn(30 / distanceScale, 2);
+  }
+
+  sphericalSegmentDist(p1, p2) {
+    const [x1, y1] = p1;
+    const [x2, y2] = p2;
+    const latMid = mapCoordinates.latN - ((y1 + y2) / 2 / graphHeight) * mapCoordinates.latT;
+    const cosLat = Math.cos(latMid * (Math.PI / 180));
+    const dxDeg = ((x2 - x1) / graphWidth) * mapCoordinates.lonT;
+    const dyDeg = ((y2 - y1) / graphHeight) * mapCoordinates.latT;
+    const totalDeg = Math.sqrt((dxDeg * cosLat) ** 2 + dyDeg ** 2);
+    return (totalDeg / mapCoordinates.latT) * graphHeight;
+  }
+
+  getSphericalPathLength() {
+    let length = 0;
+    for (let i = 0; i < this.points.length - 1; i++) {
+      length += this.sphericalSegmentDist(this.points[i], this.points[i + 1]);
+    }
+    return length;
   }
 
   drag() {
@@ -182,7 +205,7 @@ class Ruler extends Measurer {
   drawPoint(el, x, y, i) {
     const context = this;
     el.append("circle")
-      .attr("r", "1em")
+      .attr("r", this.getPointRadius())
       .attr("cx", x)
       .attr("cy", y)
       .attr("class", this.isEdge(i) ? "edge" : "control")
@@ -204,7 +227,7 @@ class Ruler extends Measurer {
   }
 
   updateLabel() {
-    const length = this.getLength();
+    const length = useSphericalArea ? this.getSphericalPathLength() : this.getLength();
     const text = rn(length * distanceScale) + " " + distanceUnitInput.value;
     const [x, y] = last(this.points);
     this.el.select("text").attr("x", x).attr("y", y).text(text);
@@ -300,7 +323,7 @@ class Opisometer extends Measurer {
       .attr("font-size", 2 * size);
     rulerPoints
       .append("circle")
-      .attr("r", "1em")
+      .attr("r", this.getPointRadius())
       .call(
         d3.drag().on("start", function () {
           context.dragControl(context, 0);
@@ -308,7 +331,7 @@ class Opisometer extends Measurer {
       );
     rulerPoints
       .append("circle")
-      .attr("r", "1em")
+      .attr("r", this.getPointRadius())
       .call(
         d3.drag().on("start", function () {
           context.dragControl(context, 1);
@@ -336,7 +359,7 @@ class Opisometer extends Measurer {
   }
 
   updateLabel() {
-    const length = this.el.select("path").node().getTotalLength();
+    const length = useSphericalArea ? this.getSphericalPathLength() : this.el.select("path").node().getTotalLength();
     const text = rn(length * distanceScale) + " " + distanceUnitInput.value;
     const [x, y] = last(this.points);
     this.el.select("text").attr("x", x).attr("y", y).text(text);
@@ -438,7 +461,7 @@ class RouteOpisometer extends Measurer {
       .attr("font-size", 2 * size);
     rulerPoints
       .append("circle")
-      .attr("r", "1em")
+      .attr("r", this.getPointRadius())
       .call(
         d3.drag().on("start", function () {
           context.dragControl(context, 0);
@@ -446,7 +469,7 @@ class RouteOpisometer extends Measurer {
       );
     rulerPoints
       .append("circle")
-      .attr("r", "1em")
+      .attr("r", this.getPointRadius())
       .call(
         d3.drag().on("start", function () {
           context.dragControl(context, 1);
@@ -474,7 +497,7 @@ class RouteOpisometer extends Measurer {
   }
 
   updateLabel() {
-    const length = this.el.select("path").node().getTotalLength();
+    const length = useSphericalArea ? this.getSphericalPathLength() : this.el.select("path").node().getTotalLength();
     const text = rn(length * distanceScale) + " " + distanceUnitInput.value;
     const [x, y] = last(this.points);
     this.el.select("text").attr("x", x).attr("y", y).text(text);

@@ -11,4 +11,5 @@ import "./draw-military";
 import "./draw-relief-icons";
 import "./draw-scalebar";
 import "./draw-state-labels";
+import "./draw-population";
 import "./draw-temperature";

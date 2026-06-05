@@ -19,7 +19,7 @@ function createRoute(defaultGroup) {
   // ensure standard route groups exist in the DOM (may be absent on loaded saves)
   const STANDARD_ROUTE_GROUPS = {
     railways: {stroke: "#222222", "stroke-width": 0.6, "stroke-dasharray": "3 1", "stroke-linecap": "square", fill: "none", opacity: 0.7},
-    airways: {stroke: "#8899bb", "stroke-width": 0.35, "stroke-dasharray": "0.5 3", "stroke-linecap": "round", fill: "none", opacity: 0.5}
+    airways: {stroke: "#6688cc", "stroke-width": 0.5, "stroke-dasharray": "1 4", "stroke-linecap": "round", fill: "none", opacity: 0.7}
   };
   for (const [id, attrs] of Object.entries(STANDARD_ROUTE_GROUPS)) {
     if (routes.select("#" + id).empty()) {

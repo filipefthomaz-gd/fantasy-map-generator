@@ -121,6 +121,7 @@ function selectStyleElement() {
       "cells",
       "coastline",
       "coordinates",
+      "conts",
       "cults",
       "gridOverlay",
       "ice",

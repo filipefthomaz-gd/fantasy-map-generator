@@ -8,8 +8,9 @@ function openTravelCalculator() {
 
   $("#travelCalculator").dialog({
     title: "Travel Calculator",
-    resizable: false,
+    resizable: true,
     width: fitContent(),
+    height: "auto",
     position: {my: "left top", at: "left+10 top+10", of: "svg", collision: "fit"},
     close: () => {
       document.getElementById("travelResults").style.display = "none";
@@ -26,6 +27,19 @@ function openTravelCalculator() {
     filterBurgSelect("travelTo", this.value);
   });
   document.getElementById("travelCalcBtn").addEventListener("click", runTravelCalculation);
+
+  document.getElementById("toggleHubViewBtn").addEventListener("click", function () {
+    const section = document.getElementById("hubViewSection");
+    const isOpen = section.style.display !== "none";
+    section.style.display = isOpen ? "none" : "";
+    if (isOpen) {
+      clearHubHighlight();
+    } else {
+      populateHubAirportSelect();
+    }
+  });
+
+  document.getElementById("hubAirportSelect").addEventListener("change", updateHubRoutes);
 }
 
 function populateBurgSelects() {
@@ -68,8 +82,9 @@ function runTravelCalculation() {
   const straightPixels = Math.hypot(b1.x - b2.x, b1.y - b2.y);
   const straightDist = rn(straightPixels * distanceScale, 1);
 
-  // Land path via Dijkstra
-  const landResult = dijkstraLand(b1.cell, b2.cell);
+  // Land path via Dijkstra — build cell→group map once, reuse for all mode calls
+  const cellGroupCache = buildCellGroupMap();
+  const landResult = dijkstraLand(b1.cell, b2.cell, null, cellGroupCache);
 
   let distHtml = `<div>Straight line: <b>${straightDist} ${unit}</b></div>`;
   let landDist = null;
@@ -78,25 +93,30 @@ function runTravelCalculation() {
   if (landResult) {
     landDist = rn(landResult.pixelLength * distanceScale, 1);
     roadShare = landResult.roadShare;
-    distHtml += `<div>Land path: <b>${landDist} ${unit}</b> <span style="opacity:0.6">(${Math.round(roadShare * 100)}% on roads)</span></div>`;
+    const trailShare = landResult.trailShare;
+    const surfaceNote = roadShare > 0.01 || trailShare > 0.01
+      ? `${Math.round(roadShare * 100)}% road, ${Math.round(trailShare * 100)}% trail`
+      : "no roads";
+    distHtml += `<div>Land path: <b>${landDist} ${unit}</b> <span style="opacity:0.6">(${surfaceNote})</span></div>`;
   } else {
     distHtml += `<div>Land path: <b>No route found</b> <span style="opacity:0.6">(separate landmasses?)</span></div>`;
   }
 
   document.getElementById("travelDistances").innerHTML = distHtml;
 
-  // Travel modes
-  // road/trail/offroad speeds in distance-units per hour
+  // Travel modes: speeds in distance-units per hour for each surface type
   const MODES = [
-    {name: "On foot",      icon: "&#x1F6B6;", road:   5, trail:   3, offroad:   2},
-    {name: "On horseback", icon: "&#x1F40E;", road:  12, trail:   7, offroad:   4},
-    {name: "By car",       icon: "&#x1F697;", road: 100, trail:  25, offroad:   8}
+    {name: "On foot",      icon: "&#x1F6B6;", road:   5, trail:   3, land:   2},
+    {name: "On horseback", icon: "&#x1F40E;", road:  12, trail:   7, land:   4},
+    {name: "By car",       icon: "&#x1F697;", road: 100, trail:  25, land:   8}
   ];
 
   let rows = "";
   if (landResult) {
+    const {roadShare, trailShare} = landResult;
+    const landShare = Math.max(0, 1 - roadShare - trailShare);
     for (const mode of MODES) {
-      const speed = travelLerp(mode.offroad, mode.road, roadShare);
+      const speed = mode.land * landShare + mode.trail * trailShare + mode.road * roadShare;
       const time = formatTravelTime(landDist / speed);
       rows += `<tr>
         <td>${mode.icon}&ensp;${mode.name}</td>
@@ -111,7 +131,7 @@ function runTravelCalculation() {
   // Railway (~160 km/h)
   const hasRailways = pack.routes.some(r => r.group === "railways");
   if (hasRailways) {
-    const railResult = dijkstraLand(b1.cell, b2.cell, "railways");
+    const railResult = dijkstraLand(b1.cell, b2.cell, "railways", cellGroupCache);
     if (railResult) {
       const railDist = rn(railResult.pixelLength * distanceScale, 1);
       const railTime = formatTravelTime(railDist / 160);
@@ -133,7 +153,7 @@ function runTravelCalculation() {
   const notes = [];
   const isPort1 = b1.port > 0;
   const isPort2 = b2.port > 0;
-  if (isPort1 || isPort2) {
+  if (isPort1 && isPort2) {
     const shipDist = rn(straightPixels * distanceScale, 1);
     const shipTime = formatTravelTime(shipDist / 20);
     rows += `<tr>
@@ -142,8 +162,6 @@ function runTravelCalculation() {
       <td style="text-align:right;padding-left:1.5em"><b>${shipTime}</b></td>
     </tr>`;
     notes.push("Sea distance is straight-line (approximate)");
-    if (!isPort1) notes.push(`${b1.name} has no port`);
-    if (!isPort2) notes.push(`${b2.name} has no port`);
   } else {
     rows += `<tr>
       <td>&#x26F5;&ensp;By ship</td>
@@ -177,10 +195,6 @@ function runTravelCalculation() {
   document.getElementById("travelResults").style.display = "";
 }
 
-function travelLerp(a, b, t) {
-  return a + (b - a) * Math.max(0, Math.min(1, t));
-}
-
 function formatTravelTime(hours) {
   if (!isFinite(hours) || hours < 0) return "—";
   if (hours < 1) return "< 1h";
@@ -194,21 +208,39 @@ function formatTravelTime(hours) {
   return h > 0 ? `${dayStr} ${h}h` : dayStr;
 }
 
-// Dijkstra on land cells. Returns { pixelLength, roadShare } or null if unreachable.
-// preferGroup: if set, edges on that route group get a strong cost bonus.
-function dijkstraLand(startCell, endCell, preferGroup) {
-  if (startCell === endCell) return {pixelLength: 0, roadShare: 1};
+// Build a map from cellId -> best route group passing through that cell.
+// Routes connect points that may skip non-adjacent cells, so we index by cell
+// membership rather than by cell-to-cell edge.
+function buildCellGroupMap() {
+  const GROUP_COST = {roads: 0.3, railways: 0.2, trails: 0.6, searoutes: 1, airways: 1};
+  const cellGroup = new Map();
+  for (const route of pack.routes) {
+    const cost = GROUP_COST[route.group];
+    if (cost === undefined || cost >= 1) continue;
+    for (const point of route.points) {
+      const cellId = point[2];
+      const existing = cellGroup.get(cellId);
+      if (!existing || GROUP_COST[existing] > cost) cellGroup.set(cellId, route.group);
+    }
+  }
+  return cellGroup;
+}
+
+// Dijkstra on land cells. Returns { pixelLength, roadShare, trailShare } or null if unreachable.
+// preferGroup: if set, cells on that route group get a strong cost bonus.
+// cellGroupCache: pre-built cell→group map; built internally if not supplied.
+function dijkstraLand(startCell, endCell, preferGroup, cellGroupCache) {
+  if (startCell === endCell) return {pixelLength: 0, roadShare: 1, trailShare: 0};
 
   const neighbors = pack.cells.c;
   const points = pack.cells.p;
   const heights = pack.cells.h;
-  const cellRoutes = pack.cells.routes || {};
-  const routeList = pack.routes;
+  const cellGroup = cellGroupCache || buildCellGroupMap();
   const n = pack.cells.i.length;
 
   const dist = new Float64Array(n).fill(Infinity);
   const prev = new Int32Array(n).fill(-1);
-  const edgeIsRoad = new Uint8Array(n); // 1 = preferred/road, 0 = not
+  const edgeSurface = new Uint8Array(n); // 0=land, 1=road, 2=trail, 3=preferred
 
   const heap = new TravelMinHeap();
   dist[startCell] = 0;
@@ -227,22 +259,23 @@ function dijkstraLand(startCell, endCell, preferGroup) {
       const [x2, y2] = points[nb];
       const base = Math.hypot(x1 - x2, y1 - y2);
 
+      // Use the destination cell's route group (cell membership, not edge lookup)
+      const group = cellGroup.get(nb) || cellGroup.get(cell);
       let mult = 1;
-      let isRoad = 0;
-      const routeId = cellRoutes[cell]?.[nb];
-      if (routeId !== undefined) {
-        const group = routeList[routeId]?.group;
-        if (preferGroup && group === preferGroup) {
-          mult = 0.1;
-          isRoad = 1;
-        } else if (group === "roads") {
-          mult = 0.3;
-          isRoad = 1;
-        } else if (group === "railways") {
-          mult = 0.2;
-        } else if (group === "trails") {
-          mult = 0.6;
-        }
+      let surface = 0;
+
+      if (preferGroup && group === preferGroup) {
+        mult = 0.1;
+        surface = 3;
+      } else if (group === "roads") {
+        mult = 0.3;
+        surface = 1;
+      } else if (group === "railways") {
+        mult = 0.2;
+        surface = 1;
+      } else if (group === "trails") {
+        mult = 0.6;
+        surface = 2;
       }
 
       const hDiff = Math.abs(heights[cell] - heights[nb]);
@@ -252,7 +285,7 @@ function dijkstraLand(startCell, endCell, preferGroup) {
       if (newCost < dist[nb]) {
         dist[nb] = newCost;
         prev[nb] = cell;
-        edgeIsRoad[nb] = isRoad;
+        edgeSurface[nb] = surface;
         heap.push(newCost, nb);
       }
     }
@@ -262,6 +295,7 @@ function dijkstraLand(startCell, endCell, preferGroup) {
 
   let pixelLength = 0;
   let roadPixels = 0;
+  let trailPixels = 0;
   let cur = endCell;
   while (cur !== startCell && prev[cur] !== -1) {
     const p = prev[cur];
@@ -269,13 +303,15 @@ function dijkstraLand(startCell, endCell, preferGroup) {
     const [x2, y2] = points[cur];
     const d = Math.hypot(x1 - x2, y1 - y2);
     pixelLength += d;
-    if (edgeIsRoad[cur]) roadPixels += d;
+    if (edgeSurface[cur] === 1 || edgeSurface[cur] === 3) roadPixels += d;
+    else if (edgeSurface[cur] === 2) trailPixels += d;
     cur = p;
   }
 
   return {
     pixelLength,
-    roadShare: pixelLength > 0 ? roadPixels / pixelLength : 0
+    roadShare: pixelLength > 0 ? roadPixels / pixelLength : 0,
+    trailShare: pixelLength > 0 ? trailPixels / pixelLength : 0
   };
 }
 
@@ -321,4 +357,125 @@ class TravelMinHeap {
       i = min;
     }
   }
+}
+
+function buildBurgByCell() {
+  const map = new Map();
+  for (const b of pack.burgs) {
+    if (b && b.i && !b.removed) map.set(b.cell, b);
+  }
+  return map;
+}
+
+function populateHubAirportSelect() {
+  const burgByCell = buildBurgByCell();
+
+  // Collect all burgs that appear as airway route endpoints
+  const airportIds = new Set();
+  for (const route of pack.routes) {
+    if (route.group !== "airways" || !route.points || route.points.length < 2) continue;
+    const a = burgByCell.get(route.points[0][2]);
+    const b = burgByCell.get(route.points[route.points.length - 1][2]);
+    if (a) airportIds.add(a.i);
+    if (b) airportIds.add(b.i);
+  }
+  for (const b of pack.burgs) {
+    if (b && b.i && !b.removed && b.airport === 1) airportIds.add(b.i);
+  }
+
+  const sorted = [...airportIds]
+    .map(id => pack.burgs[id])
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  document.getElementById("hubAirportSelect").innerHTML = sorted
+    .map(b => {
+      const state = pack.states[b.state]?.name || "Neutral";
+      return `<option value="${b.i}">${b.name} (${state})</option>`;
+    })
+    .join("");
+
+  updateHubRoutes();
+}
+
+function clearHubHighlight() {
+  d3.select("#airways").selectAll("path")
+    .style("opacity", null)
+    .style("stroke-width", null)
+    .style("stroke", null);
+}
+
+function highlightHubRoutes(hubId, burgByCell) {
+  const matched = new Set();
+  for (const route of pack.routes) {
+    if (route.group !== "airways" || !route.points || route.points.length < 2) continue;
+    const a = burgByCell.get(route.points[0][2]);
+    const b = burgByCell.get(route.points[route.points.length - 1][2]);
+    if (a?.i === hubId || b?.i === hubId) matched.add(route.i);
+  }
+
+  d3.select("#airways").selectAll("path").each(function () {
+    const routeId = +this.id.replace("route", "");
+    const isMatch = matched.has(routeId);
+    d3.select(this)
+      .style("opacity", isMatch ? 1 : 0.08)
+      .style("stroke-width", isMatch ? 1.2 : null)
+      .style("stroke", isMatch ? "#77aaff" : null);
+  });
+}
+
+function updateHubRoutes() {
+  const hubId = +document.getElementById("hubAirportSelect").value;
+  if (!hubId) return;
+  const hub = pack.burgs[hubId];
+  if (!hub) return;
+
+  const unit = distanceUnitInput.value;
+  const burgByCell = buildBurgByCell(); // built once, shared with highlight
+
+  const connections = [];
+  for (const route of pack.routes) {
+    if (route.group !== "airways" || !route.points || route.points.length < 2) continue;
+    const a = burgByCell.get(route.points[0][2]);
+    const b = burgByCell.get(route.points[route.points.length - 1][2]);
+    const dest = a?.i === hubId ? b : b?.i === hubId ? a : null;
+    if (!dest) continue;
+
+    const dist = rn(Math.hypot(hub.x - dest.x, hub.y - dest.y) * distanceScale, 1);
+    connections.push({burg: dest, dist, time: formatTravelTime(dist / 800)});
+  }
+
+  connections.sort((a, b) => a.dist - b.dist);
+
+  const el = document.getElementById("hubResults");
+  if (!connections.length) {
+    el.innerHTML = `<div style="opacity:0.6; font-size:0.9em">No air routes from ${hub.name}</div>`;
+    return;
+  }
+
+  const rows = connections.map(({burg, dist, time}) => {
+    const state = pack.states[burg.state]?.name || "Neutral";
+    return `<tr>
+      <td>&#x2708; ${burg.name}</td>
+      <td style="opacity:0.6; padding-left:0.8em; font-size:0.9em">${state}</td>
+      <td style="text-align:right; padding-left:0.8em">${dist} ${unit}</td>
+      <td style="text-align:right; padding-left:0.8em"><b>${time}</b></td>
+    </tr>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div style="margin-bottom:0.4em; font-size:0.9em; opacity:0.7">
+      ${connections.length} route${connections.length !== 1 ? "s" : ""} from <b>${hub.name}</b>
+    </div>
+    <table style="width:100%; border-collapse:collapse">
+      <thead><tr style="opacity:0.6; font-size:0.85em">
+        <th style="text-align:left; font-weight:normal">Destination</th>
+        <th style="text-align:left; font-weight:normal; padding-left:0.8em">State</th>
+        <th style="text-align:right; font-weight:normal; padding-left:0.8em">Distance</th>
+        <th style="text-align:right; font-weight:normal; padding-left:0.8em">Flight time</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  highlightHubRoutes(hubId, burgByCell);
 }

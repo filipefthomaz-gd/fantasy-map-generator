@@ -1008,6 +1008,12 @@ async function editCultures() {
   Editor.open();
 }
 
+async function editContinents() {
+  if (customization) return;
+  const Editor = await import("../dynamic/editors/continents-editor.js");
+  Editor.open();
+}
+
 async function editReligions() {
   if (customization) return;
   const Editor = await import("../dynamic/editors/religions-editor.js?v=1.120.5");

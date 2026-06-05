@@ -245,6 +245,13 @@ function showMapTooltip(point, e, i, g) {
     const culture = pack.cells.culture[i];
     tip("Culture: " + pack.cultures[culture].name);
     if (document.getElementById("culturesEditor")?.offsetParent) highlightEditorLine(culturesEditor, culture);
+  } else if (layerIsOn("toggleContinents") && pack.cells.continent?.[i]) {
+    const continentId = pack.cells.continent[i];
+    const continent = pack.continents?.[continentId];
+    if (continent) {
+      tip("Continent: " + continent.name);
+      if (document.getElementById("continentsEditor")?.offsetParent) highlightEditorLine(continentsEditor, continentId);
+    }
   } else if (layerIsOn("toggleHeight")) tip("Height: " + getFriendlyHeight(point));
 }
 
@@ -384,12 +391,20 @@ function getCellPopulation(i) {
 // get user-friendly (real-world) population value from map data
 function getFriendlyPopulation(i) {
   const [rural, urban] = getCellPopulation(i);
-  return `${si(rural + urban)} (${si(rural)} rural, urban ${si(urban)})`;
+  const density = getCellDensity(i, rural + urban);
+  return `${si(rural + urban)} (${si(rural)} rural, urban ${si(urban)}) — ${density}`;
 }
 
 function getPopulationTip(i) {
   const [rural, urban] = getCellPopulation(i);
-  return `Cell population: ${si(rural + urban)}; Rural: ${si(rural)}; Urban: ${si(urban)}`;
+  const density = getCellDensity(i, rural + urban);
+  return `Cell population: ${si(rural + urban)} (${density}); Rural: ${si(rural)}; Urban: ${si(urban)}`;
+}
+
+function getCellDensity(i, totalPop) {
+  const area = getArea(cellArea(i));
+  if (!area) return "n/a";
+  return `${si(totalPop / area)} / ${getAreaUnit()}`;
 }
 
 function highlightEmblemElement(type, el) {

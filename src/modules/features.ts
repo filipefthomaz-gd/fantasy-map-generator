@@ -1,5 +1,5 @@
 import Alea from "alea";
-import { polygonArea } from "d3";
+import { polygonArea, polygonContains } from "d3";
 import {
   clipPoly,
   connectVertices,
@@ -42,6 +42,10 @@ export interface PackedGraphFeature {
   enteringFlux?: number;
   closed?: boolean;
   outCell?: number;
+
+  // Lake-island relationship
+  innerIslands?: number[]; // island feature IDs enclosed by this lake
+  parentLake?: number; // lake feature ID that encloses this island
 }
 
 export interface GridFeature {
@@ -355,6 +359,34 @@ class FeatureModule {
   }
 
   /**
+   * Identify land islands geometrically enclosed by a lake and subtract their
+   * areas from the lake area. Must be called after pack.features is fully set.
+   */
+  resolveInnerIslands() {
+    const { cells, vertices } = pack;
+    const features = pack.features;
+    const lakes = features.filter((f) => f && f.type === "lake");
+    const islands = features.filter((f) => f && f.land && !f.border);
+
+    for (const lake of lakes) {
+      if (!lake.vertices?.length) continue;
+      delete lake.innerIslands;
+      const lakePolygon = lake.vertices.map(
+        (v) => vertices.p[v],
+      ) as [number, number][];
+
+      for (const island of islands) {
+        const islandCenter = cells.p[island.firstCell] as [number, number];
+        if (!polygonContains(lakePolygon, islandCenter)) continue;
+        island.parentLake = lake.i;
+        if (!lake.innerIslands) lake.innerIslands = [];
+        lake.innerIslands.push(island.i);
+        lake.area = Math.max(0, lake.area - island.area);
+      }
+    }
+  }
+
+  /**
    * define feature groups (ocean, sea, gulf, continent, island, isle, freshwater lake, salt lake, etc.)
    */
   defineGroups() {
@@ -365,8 +397,7 @@ class FeatureModule {
     const ISLAND_MIN_SIZE = gridCellsNumber / 1000;
 
     const defineIslandGroup = (feature: PackedGraphFeature) => {
-      const prevFeature = pack.features[pack.cells.f[feature.firstCell - 1]];
-      if (prevFeature && prevFeature.type === "lake") return "lake_island";
+      if (feature.parentLake !== undefined) return "lake_island";
       if (feature.cells > CONTINENT_MIN_SIZE) return "continent";
       if (feature.cells > ISLAND_MIN_SIZE) return "island";
       return "isle";

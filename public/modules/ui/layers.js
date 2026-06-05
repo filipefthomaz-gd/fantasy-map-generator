@@ -202,6 +202,7 @@ function drawLayers() {
   if (layerIsOn("toggleRelief")) drawReliefIcons();
   if (layerIsOn("toggleReligions")) drawReligions();
   if (layerIsOn("toggleCultures")) drawCultures();
+  if (layerIsOn("toggleContinents")) drawContinents();
   if (layerIsOn("toggleStates")) drawStates();
   if (layerIsOn("toggleProvinces")) drawProvinces();
   if (layerIsOn("toggleZones")) drawZones();
@@ -322,76 +323,15 @@ function drawPrecipitation() {
 }
 
 function togglePopulation(event) {
-  if (!population.selectAll("line").size()) {
+  if (!population.selectAll("path").size()) {
     turnButtonOn("togglePopulation");
     drawPopulation();
     if (event && isCtrlClick(event)) editStyle("population");
   } else {
     if (event && isCtrlClick(event)) return editStyle("population");
+    population.selectAll("*").remove();
     turnButtonOff("togglePopulation");
-
-    const isD3data = population.select("line").datum();
-    if (!isD3data) {
-      // just remove
-      population.selectAll("line").remove();
-    } else {
-      // remove with animation
-      const hide = d3.transition().duration(1000).ease(d3.easeSinIn);
-      population
-        .select("#rural")
-        .selectAll("line")
-        .transition(hide)
-        .attr("y2", d => d[1])
-        .remove();
-      population
-        .select("#urban")
-        .selectAll("line")
-        .transition(hide)
-        .delay(1000)
-        .attr("y2", d => d[1])
-        .remove();
-    }
   }
-}
-
-function drawPopulation() {
-  population.selectAll("line").remove();
-
-  const {cells, burgs} = pack;
-  const show = d3.transition().duration(2000).ease(d3.easeSinIn);
-
-  const rural = Array.from(
-    cells.i.filter(i => cells.pop[i] > 0),
-    i => [...cells.p[i], cells.p[i][1] - cells.pop[i] / 5]
-  );
-
-  population
-    .select("#rural")
-    .selectAll("line")
-    .data(rural)
-    .enter()
-    .append("line")
-    .attr("x1", d => d[0])
-    .attr("y1", d => d[1])
-    .attr("x2", d => d[0])
-    .attr("y2", d => d[1])
-    .transition(show)
-    .attr("y2", d => d[2]);
-
-  const urban = burgs.filter(b => b.i && !b.removed).map(b => [b.x, b.y, b.y - (b.population / 5) * urbanization]);
-  population
-    .select("#urban")
-    .selectAll("line")
-    .data(urban)
-    .enter()
-    .append("line")
-    .attr("x1", d => d[0])
-    .attr("y1", d => d[1])
-    .attr("x2", d => d[0])
-    .attr("y2", d => d[1])
-    .transition(show)
-    .delay(500)
-    .attr("y2", d => d[2]);
 }
 
 function toggleCells(event) {
@@ -454,6 +394,37 @@ function drawCultures() {
   ensureEl("cults").innerHTML = bodyPaths.join("");
 
   TIME && console.timeEnd("drawCultures");
+}
+
+function toggleContinents(event) {
+  const continents = pack.continents?.filter(c => c.i) || [];
+  const empty = !conts.selectAll("path").size();
+  if (empty && continents.length) {
+    turnButtonOn("toggleContinents");
+    drawContinents();
+    if (event && isCtrlClick(event)) editStyle("conts");
+  } else {
+    if (event && isCtrlClick(event)) return editStyle("conts");
+    conts.selectAll("path").remove();
+    turnButtonOff("toggleContinents");
+  }
+}
+
+function drawContinents() {
+  TIME && console.time("drawContinents");
+  const {cells, continents} = pack;
+  if (!continents?.length || !cells.continent) return;
+
+  const bodyPaths = new Array(continents.length - 1);
+  const isolines = getIsolines(pack, cellId => cells.continent[cellId], {fill: true, waterGap: true});
+  Object.entries(isolines).forEach(([index, {fill, waterGap}]) => {
+    const color = continents[index]?.color;
+    if (!color) return;
+    bodyPaths.push(getGappedFillPaths("continent", fill, waterGap, color, index));
+  });
+
+  ensureEl("conts").innerHTML = bodyPaths.join("");
+  TIME && console.timeEnd("drawContinents");
 }
 
 function toggleReligions(event) {
@@ -818,7 +789,7 @@ function drawRoutes() {
 
   const ROUTE_GROUP_DEFAULTS = {
     railways: {stroke: "#222222", "stroke-width": 0.6, "stroke-dasharray": "3 1", "stroke-linecap": "square", fill: "none", opacity: 0.7},
-    airways: {stroke: "#8899bb", "stroke-width": 0.35, "stroke-dasharray": "0.5 3", "stroke-linecap": "round", fill: "none", opacity: 0.5}
+    airways: {stroke: "#6688cc", "stroke-width": 0.5, "stroke-dasharray": "1 4", "stroke-linecap": "round", fill: "none", opacity: 0.7}
   };
 
   routes.selectAll("path").remove();
@@ -1186,6 +1157,7 @@ function getLayer(id) {
   if (id === "toggleRelief") return $("#terrain");
   if (id === "toggleReligions") return $("#relig");
   if (id === "toggleCultures") return $("#cults");
+  if (id === "toggleContinents") return $("#conts");
   if (id === "toggleStates") return $("#regions");
   if (id === "toggleProvinces") return $("#provs");
   if (id === "toggleBorders") return $("#borders");

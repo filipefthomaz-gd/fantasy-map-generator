@@ -54,6 +54,7 @@ let rivers = viewbox.append("g").attr("id", "rivers");
 let terrain = viewbox.append("g").attr("id", "terrain");
 let relig = viewbox.append("g").attr("id", "relig");
 let cults = viewbox.append("g").attr("id", "cults");
+let conts = viewbox.append("g").attr("id", "conts");
 let regions = viewbox.append("g").attr("id", "regions");
 let statesBody = regions.append("g").attr("id", "statesBody");
 let statesHalo = regions.append("g").attr("id", "statesHalo");
@@ -113,10 +114,6 @@ terrs.append("g").attr("id", "landHeights");
 labels.append("g").attr("id", "states");
 labels.append("g").attr("id", "addedLabels");
 let burgLabels = labels.append("g").attr("id", "burgLabels");
-
-// population groups
-population.append("g").attr("id", "rural");
-population.append("g").attr("id", "urban");
 
 // emblem groups
 emblems.append("g").attr("id", "burgEmblems");
@@ -560,6 +557,12 @@ function invokeActiveZooming() {
     }
     for (const g of _cachedLabelGroups) {
       const desired = +g.dataset.size;
+      // Groups without data-size (e.g. #states, which uses % sizes on its textPath children)
+      // manage their own font-size — don't override or hide them based on zoom.
+      if (!desired) {
+        g.classList.remove("hidden");
+        continue;
+      }
       const relative = Math.max(rn((desired + desired / scale) / 2, 2), 1);
       if (rescaleLabels.checked) g.setAttribute("font-size", relative);
 
@@ -616,8 +619,12 @@ function invokeActiveZooming() {
 
   // rescale rulers to have always the same size
   if (ruler.style("display") !== "none") {
-    const size = rn((10 / scale ** 0.3) * 2, 2);
-    ruler.selectAll("text").attr("font-size", size);
+    const size = rn((1 / scale ** 0.3) * 2, 2);
+    const pointRadius = rn(4 / scale ** 0.5, 2);
+    ruler.selectAll(".ruler, .opisometer, .planimeter").attr("font-size", 10 * size);
+    ruler.selectAll(".white, .gray, path.planimeter").attr("stroke-width", size);
+    ruler.selectAll(".rulerPoints").attr("stroke-width", 0.5 * size).attr("font-size", 2 * size);
+    ruler.selectAll("circle").attr("r", pointRadius);
   }
 }
 
@@ -704,6 +711,7 @@ async function generate(options) {
 
     reGraph();
     Features.markupPack();
+    Features.resolveInnerIslands();
     createDefaultRuler();
 
     Rivers.generate();
@@ -715,6 +723,7 @@ async function generate(options) {
     rankCells();
     Cultures.generate();
     Cultures.expand();
+    Continents.generate();
 
     Burgs.generate();
     States.generate();
