@@ -69,31 +69,6 @@ export class Voronoi {
   }
 
   /**
-   * Gets the IDs of the points comprising the given triangle. Taken from {@link https://mapbox.github.io/delaunator/#triangle-to-points| the Delaunator docs.}
-   * @param {number} t The index of the triangle
-   * @returns {[number, number, number]} The IDs of the points comprising the given triangle.
-   */
-  private pointsOfTriangle(triangleIndex: number): [number, number, number] {
-    return this.edgesOfTriangle(triangleIndex).map(
-      (edge) => this.delaunay.triangles[edge],
-    ) as [number, number, number];
-  }
-
-  /**
-   * Identifies what triangles are adjacent to the given triangle. Taken from {@link https://mapbox.github.io/delaunator/#triangle-to-triangles| the Delaunator docs.}
-   * @param {number} triangleIndex The index of the triangle
-   * @returns {number[]} The indices of the triangles that share half-edges with this triangle.
-   */
-  private trianglesAdjacentToTriangle(triangleIndex: number): number[] {
-    const triangles = [];
-    for (const edge of this.edgesOfTriangle(triangleIndex)) {
-      const opposite = this.delaunay.halfedges[edge];
-      triangles.push(this.triangleOfEdge(opposite));
-    }
-    return triangles;
-  }
-
-  /**
    * Gets the indices of all the incoming and outgoing half-edges that touch the given point. Taken from {@link https://mapbox.github.io/delaunator/#point-to-edges| the Delaunator docs.}
    * @param {number} start The index of an incoming half-edge that leads to the desired point
    * @returns {[number, number, number]} The indices of all half-edges (incoming or outgoing) that touch the point.
@@ -107,36 +82,6 @@ export class Voronoi {
       incoming = this.delaunay.halfedges[outgoing];
     } while (incoming !== -1 && incoming !== start && result.length < 20);
     return result as [number, number, number];
-  }
-
-  /**
-   * Returns the center of the triangle located at the given index.
-   * @param {number} triangleIndex The index of the triangle
-   * @returns {[number, number]} The coordinates of the triangle's circumcenter.
-   */
-  private triangleCenter(triangleIndex: number): Point {
-    const vertices = this.pointsOfTriangle(triangleIndex).map(
-      (p) => this.points[p],
-    );
-    return this.circumcenter(vertices[0], vertices[1], vertices[2]);
-  }
-
-  /**
-   * Retrieves all of the half-edges for a specific triangle `triangleIndex`. Taken from {@link https://mapbox.github.io/delaunator/#edge-and-triangle| the Delaunator docs.}
-   * @param {number} triangleIndex The index of the triangle
-   * @returns {[number, number, number]} The edges of the triangle.
-   */
-  private edgesOfTriangle(triangleIndex: number): [number, number, number] {
-    return [3 * triangleIndex, 3 * triangleIndex + 1, 3 * triangleIndex + 2];
-  }
-
-  /**
-   * Enables lookup of a triangle, given one of the half-edges of that triangle. Taken from {@link https://mapbox.github.io/delaunator/#edge-and-triangle| the Delaunator docs.}
-   * @param {number} e The index of the edge
-   * @returns {number} The index of the triangle
-   */
-  private triangleOfEdge(e: number): number {
-    return Math.floor(e / 3);
   }
 
   /**
