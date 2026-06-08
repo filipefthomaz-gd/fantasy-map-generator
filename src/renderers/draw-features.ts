@@ -5,11 +5,7 @@ import { buildCoastlinePath, fractalizeCoastline } from "./coastline-fractal";
 
 declare global {
   var drawFeatures: () => void;
-  var simplify: (
-    points: [number, number][],
-    tolerance: number,
-    highestQuality?: boolean,
-  ) => [number, number][];
+  var simplify: (points: [number, number][], tolerance: number, highestQuality?: boolean) => [number, number][];
   var getFeaturePath: (feature: PackedGraphFeature) => string;
 }
 
@@ -29,7 +25,7 @@ const featuresRenderer = (): void => {
     landMask: [],
     waterMask: ['<rect x="0" y="0" width="100%" height="100%" fill="white" />'],
     coastline: {},
-    lakes: {},
+    lakes: {}
   };
 
   for (const feature of pack.features) {
@@ -44,32 +40,19 @@ const featuresRenderer = (): void => {
     );
 
     if (feature.type === "lake") {
-      html.landMask.push(
-        `<use href="#feature_${feature.i}" data-f="${feature.i}" fill="black"></use>`,
-      );
-      html.waterMask.push(
-        `<use href="#feature_${feature.i}" data-f="${feature.i}" fill="white"></use>`,
-      );
+      html.landMask.push(`<use href="#feature_${feature.i}" data-f="${feature.i}" fill="black"></use>`);
+      html.waterMask.push(`<use href="#feature_${feature.i}" data-f="${feature.i}" fill="white"></use>`);
 
       const lakeGroup = feature.group || "freshwater";
       if (!html.lakes[lakeGroup]) html.lakes[lakeGroup] = [];
-      html.lakes[lakeGroup].push(
-        `<use href="#feature_${feature.i}" data-f="${feature.i}"></use>`,
-      );
+      html.lakes[lakeGroup].push(`<use href="#feature_${feature.i}" data-f="${feature.i}"></use>`);
     } else {
-      html.landMask.push(
-        `<use href="#feature_${feature.i}" data-f="${feature.i}" fill="white"></use>`,
-      );
-      html.waterMask.push(
-        `<use href="#feature_${feature.i}" data-f="${feature.i}" fill="black"></use>`,
-      );
+      html.landMask.push(`<use href="#feature_${feature.i}" data-f="${feature.i}" fill="white"></use>`);
+      html.waterMask.push(`<use href="#feature_${feature.i}" data-f="${feature.i}" fill="black"></use>`);
 
-      const coastlineGroup =
-        feature.group === "lake_island" ? "lake_island" : "sea_island";
+      const coastlineGroup = feature.group === "lake_island" ? "lake_island" : "sea_island";
       if (!html.coastline[coastlineGroup]) html.coastline[coastlineGroup] = [];
-      html.coastline[coastlineGroup].push(
-        `<use href="#feature_${feature.i}" data-f="${feature.i}"></use>`,
-      );
+      html.coastline[coastlineGroup].push(`<use href="#feature_${feature.i}" data-f="${feature.i}"></use>`);
     }
   }
 
@@ -91,8 +74,8 @@ const featuresRenderer = (): void => {
 };
 
 function featurePathRenderer(feature: PackedGraphFeature): string {
-  const points = feature.vertices.map((vertex) => pack.vertices.p[vertex]);
-  if (points.some((point) => point === undefined)) {
+  const points = feature.vertices.map(vertex => pack.vertices.p[vertex]);
+  if (points.some(point => point === undefined)) {
     ERROR && console.error("Undefined point in getFeaturePath");
     return "";
   }

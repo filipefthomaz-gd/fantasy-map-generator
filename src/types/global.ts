@@ -82,7 +82,7 @@ declare global {
     message: string,
     autoHide?: boolean,
     type?: "info" | "warn" | "error" | "success",
-    timeout?: number,
+    timeout?: number
   ) => void;
   var locked: (settingId: string) => boolean;
   var unlock: (settingId: string) => void;
@@ -107,10 +107,7 @@ declare global {
   var getFileName: (name: string) => string;
   var customization: number;
   var speak: (text: string) => void;
-  var uploadFile: (
-    el: HTMLInputElement,
-    callback: (data: string) => void,
-  ) => void;
+  var uploadFile: (el: HTMLInputElement, callback: (data: string) => void) => void;
   var downloadFile: (content: string | Blob, name: string) => void;
   var zoomTo: (x: number, y: number, zoom: number, duration: number) => void;
   var modules: Record<string, boolean>;

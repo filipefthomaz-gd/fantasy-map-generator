@@ -1509,7 +1509,8 @@ div.states .icon-pin,
 div.states .icon-flag-empty,
 div.states .icon-cw,
 div.states .icon-lock,
-div.states .icon-lock-open {
+div.states .icon-lock-open,
+div.states .icon-target {
   cursor: pointer;
 }
 
@@ -2439,32 +2440,44 @@ svg.button {
 
 #tourPromptButton {
   position: fixed;
-  bottom: 87px;
-  right: 26px;
-  width: 56px;
-  height: 56px;
+  bottom: 100px;
+  right: 36px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
+  background-color: var(--bg-main);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   user-select: none;
   animation: fadeIn 1s ease-in;
-  transform: scale(0.65);
-  opacity: var(--bg-opacity);
   z-index: 9999;
-  overflow: hidden;
 }
 
-#tourPromptButton img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+#tourPromptButton button {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#tourPromptButton svg path {
+  fill: #000000;
+  stroke: none;
 }
 
 #tourPromptButton:hover {
-  transform: scale(0.7);
-  opacity: 1;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+#tourPromptButton:hover svg path {
+  fill: none;
+  stroke: #000000;
+  stroke-width: 5;
+  stroke-linejoin: round;
 }
 
 @media print {
@@ -2493,58 +2506,33 @@ svg.button {
     background: #25252a;
   }
 }
-.driver-popover {
-  background-color: #1a1a2e;
-  border: 1px solid #4a4a6a;
-  color: #c8c8d0;
-  font-family: Georgia, serif;
+.fmg-tour.driver-popover {
   border-radius: 4px;
 }
 
-.driver-popover-title {
-  color: #e8d5a3;
+.fmg-tour .driver-popover-title {
   font-size: 1.1em;
-  border-bottom: 1px solid #4a4a6a;
+  border-bottom: 1px solid;
   padding-bottom: 0.4em;
   margin-bottom: 0.5em;
 }
 
-.driver-popover-description {
+.fmg-tour .driver-popover-description {
   font-size: 0.9em;
   line-height: 1.5;
 }
 
-.driver-popover-footer button {
-  background-color: #3a3a5c;
-  border: 1px solid #5a5a7a;
-  color: #c8c8d0;
+.fmg-tour .driver-popover-footer button {
   border-radius: 3px;
   cursor: pointer;
 }
 
-.driver-popover-footer button:hover {
-  background-color: #4a4a6c;
+.fmg-tour .driver-popover-footer button:hover {
+  background-color: #e0e0e0;
 }
 
-.driver-popover-progress-text {
-  color: #8a8aaa;
+.fmg-tour .driver-popover-progress-text {
   font-size: 0.8em;
-}
-
-.driver-popover-arrow-side-left.driver-popover-arrow {
-  border-left-color: #4a4a6a;
-}
-
-.driver-popover-arrow-side-right.driver-popover-arrow {
-  border-right-color: #4a4a6a;
-}
-
-.driver-popover-arrow-side-top.driver-popover-arrow {
-  border-top-color: #4a4a6a;
-}
-
-.driver-popover-arrow-side-bottom.driver-popover-arrow {
-  border-bottom-color: #4a4a6a;
 }
 
 /* Tooltip demo step: hide overlay and restore all pointer events so the map is fully hoverable */
@@ -2555,7 +2543,6 @@ body.tour-free-roam .driver-overlay {
 body.tour-free-roam * {
   pointer-events: auto !important;
 }
-
 
 #startTourButton {
   display: block;
