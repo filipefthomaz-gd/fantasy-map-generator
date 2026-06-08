@@ -386,6 +386,10 @@ async function parseLoadedData(data, mapVersion) {
       if (!climate.size()) {
         climate = viewbox.insert("g", "#population").attr("id", "climate").style("display", "none");
       }
+      conts = viewbox.select("#conts");
+      if (!conts.size()) {
+        conts = viewbox.insert("g", "#cults").attr("id", "conts");
+      }
     }
 
     {
@@ -440,6 +444,7 @@ async function parseLoadedData(data, mapVersion) {
         pack.continents = JSON.parse(data[42]);
         Continents.deriveCells();
       } else {
+        Features.defineGroups(); // ensure feature groups are set before generating continents
         Continents.generate();
       }
 

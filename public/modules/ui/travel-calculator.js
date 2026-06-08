@@ -14,6 +14,7 @@ function openTravelCalculator() {
     position: {my: "left top", at: "left+10 top+10", of: "svg", collision: "fit"},
     close: () => {
       document.getElementById("travelResults").style.display = "none";
+      hubRestoreAirways();
     }
   });
 
@@ -34,7 +35,9 @@ function openTravelCalculator() {
     section.style.display = isOpen ? "none" : "";
     if (isOpen) {
       clearHubHighlight();
+      hubRestoreAirways();
     } else {
+      hubForceAirways();
       populateHubAirportSelect();
     }
   });
@@ -79,7 +82,9 @@ function runTravelCalculation() {
   const unit = distanceUnitInput.value;
 
   // Straight-line distance
-  const straightPixels = Math.hypot(b1.x - b2.x, b1.y - b2.y);
+  const straightPixels = useSphericalArea
+    ? sphericalSegmentPixels([b1.x, b1.y], [b2.x, b2.y])
+    : Math.hypot(b1.x - b2.x, b1.y - b2.y);
   const straightDist = rn(straightPixels * distanceScale, 1);
 
   // Land path via Dijkstra — build cell→group map once, reuse for all mode calls
@@ -195,6 +200,38 @@ function runTravelCalculation() {
   document.getElementById("travelResults").style.display = "";
 }
 
+let _hubAirwaysState = null; // { hadPaths, wasHidden } when we forced visibility
+
+function hubForceAirways() {
+  const el = document.getElementById("airways");
+  if (!el) return;
+
+  const hadPaths = el.querySelector("path") !== null;
+  const wasHidden = el.style.display === "none";
+
+  if (hadPaths && !wasHidden) return; // already fully visible, nothing to do
+
+  _hubAirwaysState = {hadPaths, wasHidden};
+
+  if (!hadPaths) {
+    const airwayRoutes = pack.routes.filter(r => r.group === "airways");
+    if (!airwayRoutes.length) { _hubAirwaysState = null; return; }
+    el.innerHTML = airwayRoutes.map(r => `<path id="route${r.i}" d="${Routes.getPath(r)}"/>`).join("");
+  }
+
+  if (wasHidden) el.style.display = "";
+}
+
+function hubRestoreAirways() {
+  if (!_hubAirwaysState) return;
+  const el = document.getElementById("airways");
+  if (el) {
+    if (!_hubAirwaysState.hadPaths) el.innerHTML = "";
+    if (_hubAirwaysState.wasHidden) el.style.display = "none";
+  }
+  _hubAirwaysState = null;
+}
+
 function formatTravelTime(hours) {
   if (!isFinite(hours) || hours < 0) return "—";
   if (hours < 1) return "< 1h";
@@ -211,6 +248,17 @@ function formatTravelTime(hours) {
 // Build a map from cellId -> best route group passing through that cell.
 // Routes connect points that may skip non-adjacent cells, so we index by cell
 // membership rather than by cell-to-cell edge.
+function sphericalSegmentPixels(p1, p2) {
+  const [x1, y1] = p1;
+  const [x2, y2] = p2;
+  const latMid = mapCoordinates.latN - ((y1 + y2) / 2 / graphHeight) * mapCoordinates.latT;
+  const cosLat = Math.cos(latMid * (Math.PI / 180));
+  const dxDeg = ((x2 - x1) / graphWidth) * mapCoordinates.lonT;
+  const dyDeg = ((y2 - y1) / graphHeight) * mapCoordinates.latT;
+  const totalDeg = Math.sqrt((dxDeg * cosLat) ** 2 + dyDeg ** 2);
+  return (totalDeg / mapCoordinates.latT) * graphHeight;
+}
+
 function buildCellGroupMap() {
   const GROUP_COST = {roads: 0.3, railways: 0.2, trails: 0.6, searoutes: 1, airways: 1};
   const cellGroup = new Map();
@@ -299,9 +347,9 @@ function dijkstraLand(startCell, endCell, preferGroup, cellGroupCache) {
   let cur = endCell;
   while (cur !== startCell && prev[cur] !== -1) {
     const p = prev[cur];
-    const [x1, y1] = points[p];
-    const [x2, y2] = points[cur];
-    const d = Math.hypot(x1 - x2, y1 - y2);
+    const d = useSphericalArea
+      ? sphericalSegmentPixels(points[p], points[cur])
+      : Math.hypot(points[p][0] - points[cur][0], points[p][1] - points[cur][1]);
     pixelLength += d;
     if (edgeSurface[cur] === 1 || edgeSurface[cur] === 3) roadPixels += d;
     else if (edgeSurface[cur] === 2) trailPixels += d;
@@ -441,7 +489,9 @@ function updateHubRoutes() {
     const dest = a?.i === hubId ? b : b?.i === hubId ? a : null;
     if (!dest) continue;
 
-    const dist = rn(Math.hypot(hub.x - dest.x, hub.y - dest.y) * distanceScale, 1);
+    const dist = rn((useSphericalArea
+      ? sphericalSegmentPixels([hub.x, hub.y], [dest.x, dest.y])
+      : Math.hypot(hub.x - dest.x, hub.y - dest.y)) * distanceScale, 1);
     connections.push({burg: dest, dist, time: formatTravelTime(dist / 800)});
   }
 

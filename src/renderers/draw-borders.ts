@@ -119,10 +119,34 @@ const bordersRenderer = () => {
       checkVertex,
       addToChecked,
     });
-    if (chain.length > 1)
-      return `M${chain.map((cellId) => vertices.p[cellId]).join(" ")}`;
+    if (chain.length > 1) {
+      const smooth = svg.select("#borders").attr("data-smooth") === "1";
+      return smooth
+        ? buildSmoothedBorderPath(chain, vertices)
+        : `M${chain.map((v) => vertices.p[v]).join(" ")}`;
+    }
 
     return null;
+  }
+
+  // Quadratic B-spline through Voronoi vertices (same technique as coastline smooth spans).
+  // Moves to mid(p0,p1) then emits Q pi mid(pi,pi+1) for each vertex — zero extra geometry cost.
+  function buildSmoothedBorderPath(
+    chain: number[],
+    vertices: typeof pack.vertices,
+  ): string {
+    const pts = chain.map((v) => vertices.p[v] as [number, number]);
+    const n = pts.length;
+    if (n < 2) return "";
+
+    const mx = (i: number, j: number) => (pts[i][0] + pts[j][0]) / 2;
+    const my = (i: number, j: number) => (pts[i][1] + pts[j][1]) / 2;
+
+    const d: string[] = [`M${mx(0, 1)},${my(0, 1)}`];
+    for (let i = 1; i < n - 1; i++) {
+      d.push(`Q${pts[i][0]},${pts[i][1]} ${mx(i, i + 1)},${my(i, i + 1)}`);
+    }
+    return d.join("");
   }
 
   // connect vertices to chain to form a border

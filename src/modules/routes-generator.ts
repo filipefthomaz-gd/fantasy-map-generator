@@ -748,97 +748,140 @@ class RoutesModule {
     const qualifyingStates = pack.states.filter(
       (s: any) => s && s.i && !s.removed && this.computeAdvancement(s, ctx) >= AIRWAY_THRESHOLD,
     );
-
     const qualifyingStateIds = new Set(qualifyingStates.map((s: any) => s.i));
 
-    const airportsByState: Record<number, any[]> = {};
+    // Dedup helper — airways are undirected, so canonicalise the key
+    const addedPairs = new Set<string>();
+    const addRoute = (a: any, b: any) => {
+      const key = a.i < b.i ? `${a.i}-${b.i}` : `${b.i}-${a.i}`;
+      if (addedPairs.has(key)) return;
+      addedPairs.add(key);
+      airways.push({ feature: a.feature as number, cells: [a.cell!, b.cell!] } as Route);
+    };
 
-    // Collect airports: only the state capital + manually flagged burgs.
-    // This keeps airports rare — smaller states have one hub, bigger ones accumulate
-    // manual airports where it makes sense.
+    // Collect airports per state: capital is always index-0, manual airports follow.
+    const airportsByState: Record<number, any[]> = {};
     for (const state of qualifyingStates) {
-      const airports: any[] = [];
       const capital = pack.burgs[state.capital];
-      if (capital && !capital.removed) airports.push(capital);
+      if (!capital || capital.removed) continue;
+      const airports: any[] = [capital];
       for (const b of pack.burgs) {
         if (b && b.i && !b.removed && b.state === state.i && b.airport === 1 && b.i !== state.capital)
           airports.push(b);
       }
-      if (airports.length >= 1) airportsByState[state.i] = airports;
+      airportsByState[state.i] = airports;
     }
 
-    // Within-state airways for qualifying states
+    // ── Phase 1: Within-state routes ─────────────────────────────────────────
+    // Capital connects directly to every manual airport (guaranteed hub spoke).
+    // Non-capital airports also get Urquhart edges between themselves.
     for (const stateId of Object.keys(airportsByState).map(Number)) {
       const airports = airportsByState[stateId];
-      if (!airports || airports.length < 2) continue;
+      if (airports.length < 2) continue;
+      const capital = airports[0];
 
-      const state = pack.states[stateId];
-      const points = airports.map((b: any) => [b.x, b.y] as Point);
-      const edges: [number, number][] =
-        airports.length === 2
-          ? [[0, 1]]
-          : (this.calculateUrquhartEdges(points) as [number, number][]);
+      for (let i = 1; i < airports.length; i++) addRoute(capital, airports[i]);
 
-      edges.forEach(([fromId, toId]) => {
-        airways.push({
-          feature: state?.center ?? airports[fromId].feature,
-          cells: [airports[fromId].cell!, airports[toId].cell!],
-        } as Route);
-      });
-    }
-
-    // Connect manually-set airports from non-qualifying states globally.
-    const manualAirports = pack.burgs.filter(
-      (b: any) => b && b.i && !b.removed && b.airport === 1 && !qualifyingStateIds.has(b.state),
-    );
-    if (manualAirports.length >= 2) {
-      const points = manualAirports.map((b: any) => [b.x, b.y] as Point);
-      const edges: [number, number][] =
-        manualAirports.length === 2
-          ? [[0, 1]]
-          : (this.calculateUrquhartEdges(points) as [number, number][]);
-      edges.forEach(([fromId, toId]) => {
-        airways.push({
-          feature: manualAirports[fromId].feature as number,
-          cells: [manualAirports[fromId].cell!, manualAirports[toId].cell!],
-        } as Route);
-      });
-    }
-
-    // Cross-border airways: Allied or Friendly qualifying states.
-    // Cap at MAX_INTERNATIONAL connections per state, picking the closest pairs first,
-    // so each capital is a hub for a small number of international routes.
-    const MAX_INTERNATIONAL = 2;
-    const crossBorderCounts: Record<number, number> = {};
-
-    const pairs: Array<{ai: number; bi: number; dist: number}> = [];
-    for (let ai = 0; ai < qualifyingStates.length; ai++) {
-      const stateA = qualifyingStates[ai];
-      if (!airportsByState[stateA.i]) continue;
-      const capA = pack.burgs[stateA.capital];
-      if (!capA || capA.removed) continue;
-      for (let bi = ai + 1; bi < qualifyingStates.length; bi++) {
-        const stateB = qualifyingStates[bi];
-        if (!airportsByState[stateB.i]) continue;
-        const rel = (stateA.diplomacy as string[] | undefined)?.[stateB.i] ?? "Neutral";
-        if (rel !== "Ally" && rel !== "Friendly") continue;
-        const capB = pack.burgs[stateB.capital];
-        if (!capB || capB.removed) continue;
-        pairs.push({ai, bi, dist: Math.hypot(capA.x - capB.x, capA.y - capB.y)});
+      const nonCapitals = airports.slice(1);
+      if (nonCapitals.length >= 3) {
+        const pts = nonCapitals.map((b: any) => [b.x, b.y] as Point);
+        (this.calculateUrquhartEdges(pts) as [number, number][]).forEach(([fi, ti]) =>
+          addRoute(nonCapitals[fi], nonCapitals[ti]),
+        );
+      } else if (nonCapitals.length === 2) {
+        addRoute(nonCapitals[0], nonCapitals[1]);
       }
     }
-    pairs.sort((a, b) => a.dist - b.dist);
 
-    for (const {ai, bi} of pairs) {
-      const stateA = qualifyingStates[ai];
-      const stateB = qualifyingStates[bi];
-      if ((crossBorderCounts[stateA.i] ?? 0) >= MAX_INTERNATIONAL) continue;
-      if ((crossBorderCounts[stateB.i] ?? 0) >= MAX_INTERNATIONAL) continue;
-      const capA = pack.burgs[stateA.capital];
-      const capB = pack.burgs[stateB.capital];
-      airways.push({feature: capA.feature as number, cells: [capA.cell!, capB.cell!]} as Route);
-      crossBorderCounts[stateA.i] = (crossBorderCounts[stateA.i] ?? 0) + 1;
-      crossBorderCounts[stateB.i] = (crossBorderCounts[stateB.i] ?? 0) + 1;
+    // ── Shared helpers ────────────────────────────────────────────────────────
+    // Relation weight: higher = more likely to open a route.  0 = never.
+    const relWeight = (rel: string): number =>
+      ({Ally: 1.0, Friendly: 0.8, Vassal: 0.65, Suzerain: 0.65, Neutral: 0.35} as Record<string, number>)[rel] ?? 0;
+
+    const refDist = Math.hypot(graphWidth, graphHeight);
+
+    // Score = relWeight × distanceFactor — pure product so BOTH axes matter.
+    // Neither a very hostile nor a very distant pair will generate a route.
+    const pairScore = (rw: number, dist: number, halfLifeFraction: number) =>
+      rw * Math.exp(-dist / (refDist * halfLifeFraction));
+
+    // ── Phase 2: Capital-to-capital international routes ──────────────────────
+    // No cap — a capital can have as many routes as the scoring warrants.
+    // Pairs with score ≥ 0.5 always connect; below that probability ∝ score.
+    for (let ai = 0; ai < qualifyingStates.length; ai++) {
+      const sA = qualifyingStates[ai];
+      if (!airportsByState[sA.i]) continue;
+      const capA = pack.burgs[sA.capital];
+      if (!capA || capA.removed) continue;
+      for (let bi = ai + 1; bi < qualifyingStates.length; bi++) {
+        const sB = qualifyingStates[bi];
+        if (!airportsByState[sB.i]) continue;
+        const capB = pack.burgs[sB.capital];
+        if (!capB || capB.removed) continue;
+        const rel = (sA.diplomacy as string[] | undefined)?.[sB.i] ?? "Neutral";
+        const rw = relWeight(rel);
+        if (rw === 0) continue; // Enemy / Rival — no flights
+        const dist = Math.hypot(capA.x - capB.x, capA.y - capB.y);
+        const score = pairScore(rw, dist, 0.4);
+        if (score < 0.5 && Math.random() > score * 1.8) continue;
+        addRoute(capA, capB);
+      }
+    }
+
+    // ── Phase 3: Large manual airports → international destinations ───────────
+    // Top-third of non-capital airports by population may reach other-state
+    // capitals if they are close and diplomatically compatible.
+    // The per-airport cap scales with how large the city is relative to the
+    // median burg size, so a truly big city can have more flights than a small one.
+    const nonCapAirports = pack.burgs.filter(
+      (b: any) =>
+        b && b.i && !b.removed && b.airport === 1 &&
+        qualifyingStateIds.has(b.state) &&
+        pack.burgs[pack.states[b.state]?.capital]?.i !== b.i,
+    );
+
+    if (nonCapAirports.length > 0) {
+      const pops = nonCapAirports
+        .map((b: any) => b.population ?? 0)
+        .sort((a: number, b: number) => b - a);
+      // Only the top 20% of non-capital airports get international routes
+      const bigThreshold = pops[Math.floor(pops.length * 0.2)] ?? 0;
+
+      for (const airport of nonCapAirports) {
+        const pop = airport.population ?? 0;
+        if (pop < bigThreshold || pop === 0) continue;
+        const homeState = pack.states[airport.state as number];
+        if (!homeState) continue;
+
+        for (const other of qualifyingStates) {
+          if (other.i === airport.state) continue;
+          const otherCap = pack.burgs[other.capital];
+          if (!otherCap || otherCap.removed) continue;
+          const rel = (homeState.diplomacy as string[] | undefined)?.[other.i] ?? "Neutral";
+          const rw = relWeight(rel);
+          if (rw === 0) continue;
+          const dist = Math.hypot(airport.x - otherCap.x, airport.y - otherCap.y);
+          // Shorter half-life (0.15) and higher minimum score than capitals
+          const score = pairScore(rw, dist, 0.15);
+          if (score < 0.2) continue;
+          if (Math.random() > score * 1.5) continue;
+          addRoute(airport, otherCap);
+        }
+      }
+    }
+
+    // ── Phase 4: Manual airports from non-qualifying states ───────────────────
+    // Connect them among themselves via Urquhart.
+    const manualNonQual = pack.burgs.filter(
+      (b: any) => b && b.i && !b.removed && b.airport === 1 && !qualifyingStateIds.has(b.state),
+    );
+    if (manualNonQual.length >= 2) {
+      const pts = manualNonQual.map((b: any) => [b.x, b.y] as Point);
+      const edges: [number, number][] =
+        manualNonQual.length === 2
+          ? [[0, 1]]
+          : (this.calculateUrquhartEdges(pts) as [number, number][]);
+      edges.forEach(([fi, ti]) => addRoute(manualNonQual[fi], manualNonQual[ti]));
     }
 
     TIME && console.timeEnd("generateAirwayRoutes");

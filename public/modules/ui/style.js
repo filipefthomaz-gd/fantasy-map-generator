@@ -393,6 +393,11 @@ function selectStyleElement() {
     if (auto) styleFilter.style.display = "none";
   }
 
+  if (styleElement === "borders") {
+    styleBorders.style.display = "block";
+    styleBordersSmooth.checked = borders.attr("data-smooth") === "1";
+  }
+
   if (styleElement === "scaleBar") {
     styleScaleBar.style.display = "block";
 
@@ -562,6 +567,11 @@ styleCoastlineAuto.on("change", function () {
   coastline.select("#sea_island").attr("auto-filter", +this.checked);
   styleFilter.style.display = this.checked ? "none" : "block";
   invokeActiveZooming();
+});
+
+styleBordersSmooth.on("change", function () {
+  borders.attr("data-smooth", +this.checked);
+  if (layerIsOn("toggleBorders")) drawBorders();
 });
 
 styleOceanFill.on("input", function () {
