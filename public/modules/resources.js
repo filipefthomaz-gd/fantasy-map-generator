@@ -25,24 +25,92 @@ const RESOURCES = [
   {id: 21, name: "Trade",     icon: "⚖️", color: "#f0c060"},
 ];
 
+// Biome boundary groups for smoothing: resources should not spread across group lines.
+// Index = biome id.  Same group number = allowed to spread.
+const BIOME_GROUP = [
+  0, // 0  ocean / undefined
+  1, // 1  hot desert
+  1, // 2  cold desert
+  2, // 3  savanna
+  2, // 4  grassland / steppe
+  3, // 5  tropical seasonal forest
+  4, // 6  temperate deciduous forest
+  3, // 7  tropical rainforest
+  4, // 8  temperate rainforest
+  5, // 9  taiga / boreal
+  6, // 10 tundra
+  6, // 11 glacier
+  7, // 12 wetland
+];
+
+// What secondary resource can accompany each primary, as [{r: id, p: probability}].
+// Only the first candidate whose cumulative probability exceeds rand2 is chosen.
+const SECONDARY_TABLE = {
+  1:  [{r: 19, p: 0.25}, {r: 20, p: 0.45}, {r: 9,  p: 0.70}], // Crops   → Honey, Herbs, Cattle
+  2:  [{r: 3,  p: 0.20}, {r: 20, p: 0.50}, {r: 19, p: 0.75}], // Orchards→ Vineyards, Herbs, Honey
+  3:  [{r: 2,  p: 0.30}, {r: 20, p: 0.65}],                    // Vineyards→ Orchards, Herbs
+  4:  [{r: 20, p: 0.35}, {r: 8,  p: 0.60}],                    // Berries  → Herbs, Game
+  5:  [{r: 8,  p: 0.40}, {r: 19, p: 0.65}],                    // Timber   → Game, Honey
+  6:  [{r: 5,  p: 0.25}, {r: 13, p: 0.45}],                    // Fish     → Timber, Salt
+  7:  [{r: 6,  p: 0.45}, {r: 13, p: 0.75}],                    // Pearls   → Fish, Salt
+  8:  [{r: 5,  p: 0.35}, {r: 4,  p: 0.60}],                    // Game     → Timber, Berries
+  9:  [{r: 1,  p: 0.35}, {r: 11, p: 0.60}],                    // Cattle   → Crops, Wool
+  10: [{r: 9,  p: 0.40}, {r: 11, p: 0.65}],                    // Horses   → Cattle, Wool
+  11: [{r: 9,  p: 0.45}, {r: 10, p: 0.70}],                    // Wool     → Cattle, Horses
+  12: [{r: 16, p: 0.12}, {r: 14, p: 0.55}],                    // Ivory    → Gems, Minerals
+  13: [{r: 14, p: 0.40}, {r: 6,  p: 0.55}],                    // Salt     → Minerals, Fish
+  14: [{r: 15, p: 0.25}, {r: 16, p: 0.33}],                    // Minerals → Iron, Gems
+  15: [{r: 14, p: 0.50}, {r: 16, p: 0.60}],                    // Iron     → Minerals, Gems
+  16: [{r: 14, p: 0.55}, {r: 17, p: 0.67}],                    // Gems     → Minerals, Gold
+  17: [{r: 16, p: 0.35}, {r: 14, p: 0.70}],                    // Gold     → Gems, Minerals
+  18: [{r: 20, p: 0.50}, {r: 2,  p: 0.75}],                    // Spices   → Herbs, Orchards
+  19: [{r: 1,  p: 0.30}, {r: 20, p: 0.55}],                    // Honey    → Crops, Herbs
+  20: [{r: 19, p: 0.40}, {r: 18, p: 0.55}],                    // Herbs    → Honey, Spices
+  21: [{r: 1,  p: 0.25}, {r: 5,  p: 0.50}],                    // Trade    → Crops, Timber
+};
+
 function assignResources() {
   TIME && console.time("assignResources");
   const {cells} = pack;
-  cells.resource = new Uint8Array(cells.i.length);
+  cells.resource          = new Uint8Array(cells.i.length);
+  cells.resourceSecondary = new Uint8Array(cells.i.length);
+  cells.resourceRichness  = new Uint8Array(cells.i.length);
 
   const gPrec = grid.cells.prec;
   const gTemp = grid.cells.temp;
 
-  // Deterministic per-cell hash: produces a uniform value in [0,1) for any
-  // cell index, independent of call order — no stripes from i % N patterns.
-  const cellRand = i => {
-    let x = Math.imul(i + 1, 2654435761) >>> 0;
+  // Three independent hashes per cell, all mixed with the map seed so different
+  // maps produce different resource layouts even at equal cell indices.
+  const seedInt = (parseInt(seed) || 1) >>> 0;
+  const makeHash = salt => i => {
+    let x = Math.imul((i + 1) ^ (seedInt ^ salt), 2654435761) >>> 0;
     x ^= x >>> 16;
     x = Math.imul(x, 2246822519) >>> 0;
     x ^= x >>> 13;
     return (x >>> 0) / 4294967296;
   };
+  const cellRand  = makeHash(0x00000000); // primary assignment
+  const cellRand2 = makeHash(0x9e3779b9); // secondary assignment
+  const cellRandR = makeHash(0x517cc1b7); // richness
 
+  // Returns a 0–255 richness value for a given cell + resource combination.
+  const calcRichness = (i, res) => {
+    const noise = cellRandR(i) * 100; // 0–99 noise component
+    if (res === 17 || res === 16) return Math.min(255, 110 + noise | 0); // Gold/Gems: high when present
+    if (res === 15 || res === 14) {   // Iron/Minerals: height-amplified
+      const hBonus = Math.max(0, cells.h[i] - 55) * 1.8;
+      return Math.min(255, 40 + noise + hBonus | 0);
+    }
+    if (res === 1 || res === 9 || res === 11) { // Crops/Cattle/Wool: suit-driven
+      return Math.min(255, cells.s[i] * 13 + noise * 0.5 | 0);
+    }
+    if (res === 6) { // Fish: flux-amplified
+      return Math.min(255, 70 + noise + Math.min(55, cells.fl[i] / 8) | 0);
+    }
+    return Math.min(255, 55 + noise | 0); // default moderate
+  };
+
+  // ── Primary assignment ─────────────────────────────────────────────────────
   for (const i of cells.i) {
     const h = cells.h[i];
     if (h < 20) continue; // water cell
@@ -56,190 +124,153 @@ function assignResources() {
     const suit     = cells.s[i];
     const r        = cellRand(i);
 
-    // ── High peaks: gems, gold, minerals ───────────────────────────────────
+    let res = 0;
+
+    // ── High peaks: gems, gold, minerals ──────────────────────────────────────
     if (h > 75) {
-      if (r < 0.04)  { cells.resource[i] = 17; continue; } // Gold (very rare)
-      if (r < 0.14)  { cells.resource[i] = 16; continue; } // Gems
-      cells.resource[i] = 14; continue;                     // Minerals
+      if (r < 0.04)  res = 17; // Gold (very rare)
+      else if (r < 0.14) res = 16; // Gems
+      else res = 14;            // Minerals
     }
 
-    // ── Mid-highland: iron in forested zones, minerals elsewhere ───────────
-    if (h > 55) {
+    // ── Mid-highland: iron in forested zones, minerals elsewhere ──────────────
+    else if (h > 55) {
       const forested = biome === 6 || biome === 8 || biome === 9;
-      cells.resource[i] = (forested && r < 0.45) ? 15 : 14;
-      continue;
+      res = (forested && r < 0.45) ? 15 : 14;
     }
 
-    // ── Coastal overrides ──────────────────────────────────────────────────
-    if (isCoast) {
-      if ((biome === 1 || biome === 2) && prec < 20) {
-        cells.resource[i] = 13; continue; // Salt (arid desert coast)
-      }
-      if (temp > 18 && r < 0.45) {
-        cells.resource[i] = 7; continue;  // Pearls (warm tropical coast)
-      }
-      cells.resource[i] = 6; continue;    // Fish (default coast)
+    // ── Coastal overrides ────────────────────────────────────────────────────
+    else if (isCoast) {
+      if ((biome === 1 || biome === 2) && prec < 20) res = 13; // Salt (arid coast)
+      else if (temp > 18 && r < 0.45)                res = 7;  // Pearls (warm tropical)
+      else                                            res = 6;  // Fish (default)
     }
 
-    // ── Rivers: freshwater fishing at low-elevation mouths ─────────────────
-    // Skip in agricultural biomes — large rivers there boost crops, not fishing.
-    const isAgriBiome = biome === 3 || biome === 4 || biome === 6;
-    if (hasRiver && h <= 26 && flux > 80 && !(isAgriBiome && suit >= 5)) {
-      cells.resource[i] = 6; continue;
+    // ── Rivers: freshwater fishing at low-elevation mouths ────────────────────
+    else if (hasRiver && h <= 26 && flux > 80) {
+      const isAgriBiome = biome === 3 || biome === 4 || biome === 6;
+      if (!(isAgriBiome && suit >= 5)) res = 6;
     }
 
-    // ── Deserts: salt flats, dried riverbeds, exposed mineral seams ────────
-    if (biome === 1 || biome === 2) {
-      if (r < 0.12)      cells.resource[i] = 13; // Salt (salt flats, dry lake beds)
-      else if (r < 0.20) cells.resource[i] = 14; // Minerals (exposed rock seams)
-      continue;
+    // ── Deserts ───────────────────────────────────────────────────────────────
+    if (!res && (biome === 1 || biome === 2)) {
+      if (r < 0.12)      res = 13; // Salt
+      else if (r < 0.20) res = 14; // Minerals
     }
 
-    // ── Biome-driven inland rules ──────────────────────────────────────────
+    // ── Biome-driven inland rules ─────────────────────────────────────────────
+    if (!res) switch (biome) {
+      case 3: // Savanna
+        if (r < 0.07) res = 12;
+        else if (suit >= 8 || hasRiver) res = r < 0.38 ? 1 : r < 0.68 ? 9 : 10;
+        else if (suit >= 3)             res = r < 0.18 ? 1 : r < 0.55 ? 9 : 10;
+        else                            res = r < 0.55 ? 10 : 9;
+        break;
 
-    if (biome === 3) {
-      // Savanna — also low-precip by definition; use suit like grassland
-      if (r < 0.07) { cells.resource[i] = 12; continue; } // Ivory (rare, any savanna)
-      if (suit >= 8 || hasRiver) {
-        // Fertile savanna / river margins: sorghum, millet, yam
-        cells.resource[i] = r < 0.38 ? 1 : (r < 0.68 ? 9 : 10); // Crops, Cattle, Horses
-      } else if (suit >= 3) {
-        // Typical savanna: mostly pastoral, some crops
-        cells.resource[i] = r < 0.18 ? 1 : (r < 0.55 ? 9 : 10); // Crops, Cattle, Horses
-      } else {
-        // Harsh dry savanna: pastoral only
-        cells.resource[i] = r < 0.55 ? 10 : 9; // Horses or Cattle
-      }
-      continue;
-    }
+      case 4: // Grassland/Steppe
+        if (suit >= 10 || hasRiver) {
+          if (r < 0.52)      res = 1;
+          else if (r < 0.78) res = 9;
+          else               res = 8;
+        } else if (suit >= 3) {
+          if (r < 0.30)      res = 1;
+          else if (r < 0.55) res = 9;
+          else if (r < 0.78) res = 11;
+          else               res = 10;
+        } else {
+          if (r < 0.40)      res = 9;
+          else if (r < 0.72) res = 10;
+          else               res = 11;
+        }
+        break;
 
-    if (biome === 4) {
-      // Grassland/Steppe — historically among the world's most productive grain regions.
-      // Grassland is a LOW-precip biome by definition, so prec is a poor proxy for
-      // agricultural potential here. Use suit (habitability score) instead.
-      if (suit >= 10 || hasRiver) {
-        // Well-watered plains / river valleys: grain farming dominates
-        if (r < 0.52)      cells.resource[i] = 1;  // Crops
-        else if (r < 0.78) cells.resource[i] = 9;  // Cattle
-        else               cells.resource[i] = 8;  // Game
-      } else if (suit >= 3) {
-        // Typical steppe: mixed pastoral with some crops
-        if (r < 0.30)      cells.resource[i] = 1;  // Crops
-        else if (r < 0.55) cells.resource[i] = 9;  // Cattle
-        else if (r < 0.78) cells.resource[i] = 11; // Wool
-        else               cells.resource[i] = 10; // Horses
-      } else {
-        // Harsh/arid steppe: pastoral only
-        if (r < 0.40)      cells.resource[i] = 9;  // Cattle
-        else if (r < 0.72) cells.resource[i] = 10; // Horses
-        else               cells.resource[i] = 11; // Wool
-      }
-      continue;
-    }
+      case 5: // Tropical seasonal forest
+        if (r < 0.06) res = 12;
+        else if (h <= 32 && suit >= 5) res = r < 0.35 ? 1 : r < 0.60 ? 18 : 2;
+        else {
+          if (r < 0.28)      res = 18;
+          else if (r < 0.50) res = 2;
+          else if (r < 0.72) res = 20;
+          else               res = 5;
+        }
+        break;
 
-    if (biome === 5) {
-      // Tropical seasonal forest — rice, cassava, yam grow at lower elevations
-      if (r < 0.06) { cells.resource[i] = 12; continue; } // Ivory
-      if (h <= 32 && suit >= 5) {
-        // Lowland clearings: tropical crops alongside spices and orchards
-        cells.resource[i] = r < 0.35 ? 1 : (r < 0.60 ? 18 : 2); // Crops, Spices, Orchards
-      } else {
-        if (r < 0.28)  { cells.resource[i] = 18; continue; } // Spices
-        if (r < 0.50)  { cells.resource[i] = 2;  continue; } // Orchards
-        if (r < 0.72)  { cells.resource[i] = 20; continue; } // Herbs
-        cells.resource[i] = 5;                                // Timber
-      }
-      continue;
-    }
+      case 6: // Temperate deciduous forest
+        if (h <= 35) {
+          const pick = r * 10 | 0;
+          if (pick < 4)      res = 1;
+          else if (pick < 6) res = 5;
+          else if (pick < 8) res = 9;
+          else if (pick < 9) res = 19;
+          else               res = 2;
+        } else if (h > 42 && temp > 11 && prec < 65) {
+          res = r < 0.28 ? 3 : r < 0.65 ? 5 : 11;
+        } else {
+          const pick = r * 10 | 0;
+          if (pick < 5)      res = 5;
+          else if (pick < 7) res = 8;
+          else               res = 19;
+        }
+        break;
 
-    if (biome === 6) {
-      // Temperate deciduous forest
-      if (h <= 35) {
-        // Lowland temperate forest: partially cleared for farming
+      case 7: // Tropical rainforest
+        if (r < 0.40)      res = 18;
+        else if (r < 0.70) res = 20;
+        else               res = 5;
+        break;
+
+      case 8: // Temperate rainforest
+        res = (h <= 30 && temp > 10) ? (r < 0.45 ? 2 : 5) : (r < 0.88 ? 5 : 8);
+        break;
+
+      case 9: // Taiga/Boreal
+        if (h > 50) res = r < 0.55 ? 8 : 4;
+        else {
+          const pick = r * 10 | 0;
+          if (pick < 5)      res = 5;
+          else if (pick < 7) res = 8;
+          else if (pick < 9) res = 4;
+          else               res = 19;
+        }
+        break;
+
+      case 10: // Tundra
+        res = r < 0.55 ? 8 : r < 0.85 ? 4 : 11;
+        break;
+
+      case 12: // Wetland
         const pick = r * 10 | 0;
-        if (pick < 4)      cells.resource[i] = 1;  // Crops (40%)
-        else if (pick < 6) cells.resource[i] = 5;  // Timber (20%)
-        else if (pick < 8) cells.resource[i] = 9;  // Cattle (20%)
-        else if (pick < 9) cells.resource[i] = 19; // Honey (10%)
-        else               cells.resource[i] = 2;  // Orchards (10%)
-      } else if (h > 42 && temp > 11 && prec < 65) {
-        // Warm hillsides: vineyards, timber, wool
-        cells.resource[i] = r < 0.28 ? 3 : (r < 0.65 ? 5 : 11);
-      } else {
-        // Forest interior: timber, game, honey
-        const pick = r * 10 | 0;
-        if (pick < 5)      cells.resource[i] = 5;  // Timber (50%)
-        else if (pick < 7) cells.resource[i] = 8;  // Game (20%)
-        else               cells.resource[i] = 19; // Honey (30%) — merged herbs into honey
-      }
-      continue;
+        if (pick < 5)      res = 6;
+        else if (pick < 7) res = 20;
+        else if (pick < 9) res = 19;
+        else               res = 4;
+        break;
     }
 
-    if (biome === 7) {
-      // Tropical rainforest
-      const pick = r * 10 | 0;
-      if (pick < 4)      cells.resource[i] = 18; // Spices (40%)
-      else if (pick < 7) cells.resource[i] = 20; // Herbs (30%)
-      else               cells.resource[i] = 5;  // Timber (30%)
-      continue;
-    }
-
-    if (biome === 8) {
-      // Temperate rainforest
-      if (h <= 30 && temp > 10) {
-        cells.resource[i] = r < 0.45 ? 2 : 5; // Orchards or Timber
-      } else {
-        cells.resource[i] = r < 0.88 ? 5 : 8; // Timber or Game
-      }
-      continue;
-    }
-
-    if (biome === 9) {
-      // Taiga/Boreal forest
-      if (h > 50) {
-        cells.resource[i] = r < 0.55 ? 8 : 4; // Game or Berries
-      } else {
-        const pick = r * 10 | 0;
-        if (pick < 5)      cells.resource[i] = 5;  // Timber (50%)
-        else if (pick < 7) cells.resource[i] = 8;  // Game (20%)
-        else if (pick < 9) cells.resource[i] = 4;  // Berries (20%)
-        else               cells.resource[i] = 19; // Honey (10%)
-      }
-      continue;
-    }
-
-    if (biome === 10) {
-      // Tundra
-      cells.resource[i] = r < 0.55 ? 8 : (r < 0.85 ? 4 : 11); // Game, Berries, Wool
-      continue;
-    }
-
-    if (biome === 12) {
-      // Wetland
-      const pick = r * 10 | 0;
-      if (pick < 5)      cells.resource[i] = 6;  // Fish (50%)
-      else if (pick < 7) cells.resource[i] = 20; // Herbs (20%)
-      else if (pick < 9) cells.resource[i] = 19; // Honey (20%)
-      else               cells.resource[i] = 4;  // Berries (10%)
-      continue;
+    if (res) {
+      cells.resource[i]         = res;
+      cells.resourceRichness[i] = calcRichness(i, res);
     }
   }
 
-  // ── Smoothing pass: 2 rounds of majority-neighbor clustering ─────────────
-  // Turns the salt-and-pepper per-cell assignments into contiguous patches.
+  // ── Smoothing pass: 2 rounds of biome-aware majority-neighbor clustering ────
   // Coasts and high peaks are excluded — their resources are geography-driven.
   for (let round = 0; round < 2; round++) {
     const next = new Uint8Array(cells.resource);
     for (const i of cells.i) {
       if (cells.h[i] < 20) continue;
-      if (cells.h[i] > 65) continue;  // preserve mineral peaks
-      if (cells.t[i] === 1) continue; // preserve coastal fish/pearls/salt
+      if (cells.h[i] > 65) continue;
+      if (cells.t[i] === 1) continue;
 
-      const neighbors = cells.c[i];
-      const counts = new Uint8Array(22); // index = resource id
+      const myGroup    = BIOME_GROUP[cells.biome[i]] || 0;
+      const neighbors  = cells.c[i];
+      const counts     = new Uint8Array(22);
       let landNeighbors = 0;
+
       for (const n of neighbors) {
         if (cells.h[n] < 20) continue;
+        // Only spread within the same biome group
+        if ((BIOME_GROUP[cells.biome[n]] || 0) !== myGroup) continue;
         landNeighbors++;
         const res = cells.resource[n];
         if (res > 0) counts[res]++;
@@ -251,20 +282,20 @@ function assignResources() {
         if (counts[res] > bestCount) { best = res; bestCount = counts[res]; }
       }
 
-      const current = cells.resource[i];
-      const hasWaterAccess = cells.t[i] === 1 || cells.r[i] > 0;
-
-      // Never spread Fish to cells without water access
-      if (best === 6 && !hasWaterAccess) {
-        // Pick the next best non-fish resource instead
-        let nextBest = 0, nextCount = 0;
-        for (let res = 1; res < 22; res++) {
-          if (res === 6) continue;
-          if (counts[res] > nextCount) { nextBest = res; nextCount = counts[res]; }
+      // Fish must not spread to cells without water access
+      if (best === 6) {
+        const hasWater = cells.t[i] === 1 || cells.r[i] > 0;
+        if (!hasWater) {
+          let nextBest = 0, nextCount = 0;
+          for (let res = 1; res < 22; res++) {
+            if (res === 6) continue;
+            if (counts[res] > nextCount) { nextBest = res; nextCount = counts[res]; }
+          }
+          best = nextBest; bestCount = nextCount;
         }
-        best = nextBest; bestCount = nextCount;
       }
 
+      const current = cells.resource[i];
       if (current === 0) {
         if (bestCount >= Math.min(4, landNeighbors)) next[i] = best;
       } else if (best !== current && best !== 0) {
@@ -272,6 +303,63 @@ function assignResources() {
       }
     }
     cells.resource = next;
+  }
+
+  // ── Mineral vein propagation: extend deposits along ridges ──────────────────
+  // Turns isolated mineral cells into coherent veins along high terrain.
+  const MINERAL_IDS = new Set([14, 15, 16, 17]);
+  for (let pass = 0; pass < 2; pass++) {
+    const next = new Uint8Array(cells.resource);
+    for (const i of cells.i) {
+      if (cells.h[i] < 55) continue;
+      const res = cells.resource[i];
+      if (!MINERAL_IDS.has(res)) continue;
+
+      for (const n of cells.c[i]) {
+        if (cells.h[n] < 50) continue;
+        const nRes = cells.resource[n];
+        // Replace generic Minerals with a specific adjacent deposit type
+        if (nRes === 14 && res > 14) {
+          if (cellRand(n * 13 + pass + 1) < 0.55) next[n] = res;
+        }
+      }
+    }
+    cells.resource = next;
+  }
+
+  // ── Secondary resource assignment ────────────────────────────────────────────
+  for (const i of cells.i) {
+    const primary = cells.resource[i];
+    if (!primary) continue;
+    const candidates = SECONDARY_TABLE[primary];
+    if (!candidates) continue;
+
+    const r2 = cellRand2(i);
+    for (const {r: id, p} of candidates) {
+      if (r2 < p) { cells.resourceSecondary[i] = id; break; }
+    }
+  }
+
+  // ── Trade hub assignment (post-pass) ─────────────────────────────────────────
+  // Marks cells that sit at natural crossroad positions (high suitability AND
+  // adjacent to 3+ different biome groups) as Trade — regardless of existing
+  // primary resource, unless it's a rare mineral.
+  const RARE = new Set([16, 17]); // Gems, Gold — never overwrite
+  for (const i of cells.i) {
+    if (cells.h[i] < 20) continue;
+    if (RARE.has(cells.resource[i])) continue;
+    if (cells.s[i] < 7) continue;
+
+    const neighborGroups = new Set();
+    for (const n of cells.c[i]) {
+      if (cells.h[n] >= 20) neighborGroups.add(BIOME_GROUP[cells.biome[n]] || 0);
+    }
+    if (neighborGroups.size < 3) continue;
+
+    if (cellRand(i + 999999) < 0.12) {
+      cells.resource[i]         = 21; // Trade
+      cells.resourceRichness[i] = calcRichness(i, 21);
+    }
   }
 
   TIME && console.timeEnd("assignResources");

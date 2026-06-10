@@ -283,7 +283,7 @@ function drawBiomes() {
 }
 
 function togglePrecipitation(event) {
-  if (!prec.selectAll("circle").size()) {
+  if (!prec.selectAll("circle, path").size()) {
     turnButtonOn("togglePrecipitation");
     drawPrecipitation();
     if (event && isCtrlClick(event)) editStyle("prec");
@@ -293,36 +293,9 @@ function togglePrecipitation(event) {
     const hide = d3.transition().duration(1000).ease(d3.easeSinIn);
     prec.selectAll("text").attr("opacity", 1).transition(hide).attr("opacity", 0);
     prec.selectAll("circle").transition(hide).attr("r", 0).remove();
+    prec.selectAll("path").transition(hide).attr("opacity", 0).remove();
     prec.transition().delay(1000).style("display", "none");
   }
-}
-
-function drawPrecipitation() {
-  TIME && console.time("drawPrecipitation");
-
-  prec.selectAll("circle").remove();
-  const {cells, points} = grid;
-
-  const show = d3.transition().duration(800).ease(d3.easeSinIn);
-  prec.selectAll("text").attr("opacity", 0).transition(show).attr("opacity", 1);
-
-  const cellsNumberModifier = (pointsInput.dataset.cells / 10000) ** 0.25;
-  const data = cells.i.filter(i => cells.h[i] >= 20 && cells.prec[i]);
-  const getRadius = prec => rn(Math.sqrt(prec / 4) / cellsNumberModifier, 2);
-
-  prec
-    .style("display", "block")
-    .selectAll("circle")
-    .data(data)
-    .enter()
-    .append("circle")
-    .attr("cx", d => points[d][0])
-    .attr("cy", d => points[d][1])
-    .attr("r", 0)
-    .transition(show)
-    .attr("r", d => getRadius(cells.prec[d]));
-
-  TIME && console.timeEnd("drawPrecipitation");
 }
 
 function togglePopulation(event) {

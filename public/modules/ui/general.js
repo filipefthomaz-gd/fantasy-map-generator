@@ -217,7 +217,14 @@ function showMapTooltip(point, e, i, g) {
 
   // covering elements
   if (layerIsOn("togglePrecipitation") && land) tip("Annual Precipitation: " + getFriendlyPrecipitation(i));
-  else if (layerIsOn("toggleResources") && pack.cells.resource?.[i]) tip("Resource: " + RESOURCES[pack.cells.resource[i]].name);
+  else if (layerIsOn("toggleResources") && pack.cells.resource?.[i]) {
+    const primary   = RESOURCES[pack.cells.resource[i]].name;
+    const secId     = pack.cells.resourceSecondary?.[i];
+    const secondary = secId ? " + " + RESOURCES[secId].name : "";
+    const richness  = pack.cells.resourceRichness?.[i];
+    const stars     = richness ? " (" + "★".repeat(1 + (richness / 64 | 0)) + ")" : "";
+    tip("Resource: " + primary + secondary + stars);
+  }
   else if (layerIsOn("togglePopulation")) tip(getPopulationTip(i));
   else if (layerIsOn("toggleTemperature")) tip("Temperature: " + convertTemperature(getDisplayTemp(g)));
   else if (layerIsOn("toggleBiomes") && pack.cells.biome[i]) {

@@ -44,6 +44,7 @@ declare global {
   var terrs: Selection<SVGGElement, unknown, null, undefined>;
   var temperature: Selection<SVGGElement, unknown, null, undefined>;
   var population: Selection<SVGGElement, unknown, null, undefined>;
+  var prec: Selection<SVGGElement, unknown, null, undefined>;
   var markers: Selection<SVGGElement, unknown, null, undefined>;
   var defs: Selection<SVGDefsElement, unknown, null, undefined>;
   var coastline: Selection<SVGGElement, unknown, null, undefined>;

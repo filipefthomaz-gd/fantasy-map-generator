@@ -162,7 +162,9 @@ function prepareMapData() {
     ice,
     JSON.stringify(mapTimeline),
     pack.cells.resource ? Array.from(pack.cells.resource).join(",") : "",
-    continents
+    continents,
+    pack.cells.resourceSecondary ? Array.from(pack.cells.resourceSecondary).join(",") : "",
+    pack.cells.resourceRichness  ? Array.from(pack.cells.resourceRichness).join(",")  : ""
   ].join("\r\n");
   return mapData;
 }

@@ -448,6 +448,13 @@ async function parseLoadedData(data, mapVersion) {
         Continents.generate();
       }
 
+      pack.cells.resourceSecondary = data[43]
+        ? Uint8Array.from(data[43].split(","))
+        : new Uint8Array(pack.cells.i.length);
+      pack.cells.resourceRichness = data[44]
+        ? Uint8Array.from(data[44].split(","))
+        : new Uint8Array(pack.cells.i.length);
+
       if (data[31]) {
         const namesDL = data[31].split("/");
         namesDL.forEach((d, i) => {

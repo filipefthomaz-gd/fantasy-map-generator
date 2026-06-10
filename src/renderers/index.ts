@@ -12,4 +12,5 @@ import "./draw-relief-icons";
 import "./draw-scalebar";
 import "./draw-state-labels";
 import "./draw-population";
+import "./draw-precipitation";
 import "./draw-temperature";
