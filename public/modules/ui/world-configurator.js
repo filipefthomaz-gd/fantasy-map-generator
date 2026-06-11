@@ -29,6 +29,7 @@ function editWorld() {
   updateInputValues();
   updateGlobeTemperature();
   updateGlobePosition();
+  updateWindDirections();
 
   if (modules.editWorld) return;
   modules.editWorld = true;
@@ -36,10 +37,11 @@ function editWorld() {
   const graticule = d3.geoGraticule();
   globe.select("#globeWindArrows").on("click", handleWindChange);
   globe.select("#globeGraticule").attr("d", round(path(graticule()))); // globe graticule
-  updateWindDirections();
 
   ensureEl("worldControls").on("input", handleControlsChange);
   ensureEl("restoreWinds").on("click", restoreDefaultWinds);
+  ensureEl("loadSavedWinds").on("click", loadSavedWinds);
+  ensureEl("regenerateWorld").on("click", updateWorld);
   ensureEl("wcWholeWorld").on("click", () => applyWorldPreset(100, 50));
   ensureEl("wcNorthern").on("click", () => applyWorldPreset(33, 25));
   ensureEl("wcTropical").on("click", () => applyWorldPreset(33, 50));
@@ -175,16 +177,22 @@ function editWorld() {
     const tr = parseTransform(arrow.getAttribute("transform"));
     arrow.setAttribute("transform", `rotate(${options.winds[tier]} ${tr[1]} ${tr[2]})`);
     localStorage.setItem("winds", options.winds);
-
-    const mapTiers = d3.range(mapCoordinates.latN, mapCoordinates.latS, -30).map(c => ((90 - c) / 30) | 0);
-    if (ensureEl("wcAutoChange").checked && mapTiers.includes(tier)) updateWorld();
   }
 
   function restoreDefaultWinds() {
     const defaultWinds = [225, 45, 225, 315, 135, 315];
     const mapTiers = d3.range(mapCoordinates.latN, mapCoordinates.latS, -30).map(c => ((90 - c) / 30) | 0);
-    const update = ensureEl("wcAutoChange").checked && mapTiers.some(t => options.winds[t] != defaultWinds[t]);
+    const update = mapTiers.some(t => options.winds[t] != defaultWinds[t]);
     options.winds = defaultWinds;
+    updateWindDirections();
+    if (update) updateWorld();
+  }
+
+  function loadSavedWinds() {
+    if (!window.loadedMapWinds) return tip("No saved winds available — load a map first", true, "warning");
+    const mapTiers = d3.range(mapCoordinates.latN, mapCoordinates.latS, -30).map(c => ((90 - c) / 30) | 0);
+    const update = mapTiers.some(t => options.winds[t] != window.loadedMapWinds[t]);
+    options.winds = [...window.loadedMapWinds];
     updateWindDirections();
     if (update) updateWorld();
   }
