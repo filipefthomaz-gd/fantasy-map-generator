@@ -134,7 +134,7 @@ class BiomesModule {
   private isWetland(moisture: number, temperature: number, height: number) {
     if (temperature <= -2) return false; // too cold
     if (moisture > 40 && height < 25) return true; // near coast
-    if (moisture > 24 && height > 24 && height < 60) return true; // off coast
+    if (moisture > 24 && height > 24 && height < 40) return true; // off coast
     return false;
   }
 }

@@ -1152,7 +1152,7 @@ function generatePrecipitation() {
         if (cells.h[current] < 20) {
           // water cell
           if (cells.h[current + next] >= 20) {
-            cells.prec[current + next] += Math.max(humidity / rand(10, 20), 1); // coastal precipitation
+            cells.prec[current + next] += Math.max(humidity / rand(30, 50), 1); // coastal precipitation
           } else {
             humidity = Math.min(humidity + 5 * modifier, maxPrec); // wind gets more humidity passing water cell
             cells.prec[current] += 5 * modifier; // water cells precipitation (need to correctly pour water through lakes)
@@ -1171,7 +1171,7 @@ function generatePrecipitation() {
   }
 
   function getPrecipitation(humidity, i, n) {
-    const normalLoss = Math.max(humidity / (10 * modifier), 1); // precipitation in normal conditions
+    const normalLoss = Math.max(humidity / (12 * modifier), 1); // precipitation in normal conditions
     const diff = Math.max(cells.h[i + n] - cells.h[i], 0); // difference in height
     const mod = (cells.h[i + n] / 70) ** 2; // 50 stands for hills, 70 for mountains
     return minmax(normalLoss + diff * mod, 1, humidity);
@@ -1286,7 +1286,7 @@ function reGraph() {
 
 function isWetLand(moisture, temperature, height) {
   if (moisture > 40 && temperature > -2 && height < 25) return true; //near coast
-  if (moisture > 24 && temperature > -2 && height > 24 && height < 60) return true; //off coast
+  if (moisture > 24 && temperature > -2 && height > 24 && height < 40) return true; //off coast
   return false;
 }
 
