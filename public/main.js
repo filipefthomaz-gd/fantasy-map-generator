@@ -1051,17 +1051,41 @@ function generatePrecipitation() {
   const MAX_PASSABLE_ELEVATION = 85;
 
   // define wind directions based on cells latitude and prevailing winds there
+  const TIER_BLEND_DEGREES = 10; // blend zone width (degrees) on each side of tier boundary
   d3.range(0, cells.i.length, cellsX).forEach(function (c, i) {
     const lat = mapCoordinates.latN - (i / cellsY) * mapCoordinates.latT;
-    const latBand = ((Math.abs(lat) - 1) / 5) | 0;
-    const latMod = latitudeModifier[latBand];
+
+    // Interpolate latitudeModifier instead of stepping so humidity doesn't jump at band edges
+    const latBandExact = Math.max(0, (Math.abs(lat) - 1) / 5);
+    const latBandLow = Math.min(Math.floor(latBandExact), 17);
+    const latBandHigh = Math.min(latBandLow + 1, 17);
+    const latMod = latitudeModifier[latBandLow] * (1 - (latBandExact - latBandLow)) + latitudeModifier[latBandHigh] * (latBandExact - latBandLow);
+
     const windTier = (Math.abs(lat - 89) / 30) | 0; // 30d tiers from 0 to 5 from N to S
+    const posInTier = Math.abs(lat - 89) % 30; // degrees from tier start (0) toward tier end (~30)
     const {isWest, isEast, isNorth, isSouth} = getWindDirections(windTier);
 
     if (isWest) westerly.push([c, latMod, windTier]);
     if (isEast) easterly.push([c + cellsX - 1, latMod, windTier]);
     if (isNorth) northerly++;
     if (isSouth) southerly++;
+
+    // Blend into the adjacent tier near boundaries to soften hard precipitation transitions.
+    // Only add the directions the adjacent tier has that the current tier lacks, so we don't
+    // double-count shared directions — only the flip (west↔east) creates a visible band.
+    let adjTier = -1, blendWeight = 0;
+    if (posInTier > 30 - TIER_BLEND_DEGREES && windTier < 5) {
+      adjTier = windTier + 1;
+      blendWeight = (posInTier - (30 - TIER_BLEND_DEGREES)) / TIER_BLEND_DEGREES;
+    } else if (posInTier < TIER_BLEND_DEGREES && windTier > 0) {
+      adjTier = windTier - 1;
+      blendWeight = (TIER_BLEND_DEGREES - posInTier) / TIER_BLEND_DEGREES;
+    }
+    if (adjTier >= 0) {
+      const adj = getWindDirections(adjTier);
+      if (adj.isWest && !isWest) westerly.push([c, latMod * blendWeight, adjTier]);
+      if (adj.isEast && !isEast) easterly.push([c + cellsX - 1, latMod * blendWeight, adjTier]);
+    }
   });
 
   // distribute winds by direction
@@ -1081,6 +1105,22 @@ function generatePrecipitation() {
     const latModS = mapCoordinates.latT > 60 ? d3.mean(latitudeModifier) : latitudeModifier[bandS];
     const maxPrecS = (southerly / vertT) * 60 * modifier * latModS;
     passWind(d3.range(cells.i.length - cellsX, cells.i.length, 1), maxPrecS, -cellsX, cellsY);
+  }
+
+  // Vertical blur to smooth tier-boundary precipitation bands.
+  // Only blurs north-south, so east-west rain-shadow structure is preserved.
+  {
+    let precF = new Float32Array(cells.prec);
+    for (let pass = 0; pass < 3; pass++) {
+      const src = precF.slice();
+      for (let r = 1; r < cellsY - 1; r++) {
+        for (let c = 0; c < cellsX; c++) {
+          const i = r * cellsX + c;
+          precF[i] = (src[i - cellsX] + src[i] * 2 + src[i + cellsX]) / 4;
+        }
+      }
+    }
+    cells.prec = new Uint8Array(precF.map(v => minmax(Math.round(v), 0, 255)));
   }
 
   function getWindDirections(tier) {
