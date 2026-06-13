@@ -1027,7 +1027,7 @@ function generatePrecipitation() {
   TIME && console.time("generatePrecipitation");
   prec.selectAll("*").remove();
   const {cells, cellsX, cellsY} = grid;
-  cells.prec = new Uint8Array(cells.i.length); // precipitation array
+  cells.prec = new Uint8Array(cells.i.length); // horizontal pass accumulator (swapped during V pass)
 
   const cellsNumberModifier = (pointsInput.dataset.cells / 10000) ** 0.25;
   const precInputModifier = precInput.value / 100;
@@ -1037,7 +1037,6 @@ function generatePrecipitation() {
   const easterly = [];
   let southerly = 0;
   let northerly = 0;
-
   // precipitation modifier per latitude band
   // x4 = 0-5 latitude: wet through the year (rising zone)
   // x2 = 5-20 latitude: wet summer (rising zone), dry winter (sinking zone)
@@ -1051,7 +1050,7 @@ function generatePrecipitation() {
   const MAX_PASSABLE_ELEVATION = 85;
 
   // define wind directions based on cells latitude and prevailing winds there
-  const TIER_BLEND_DEGREES = 10; // blend zone width (degrees) on each side of tier boundary
+  const TIER_BLEND_DEGREES = 7; // blend zone width (degrees) on each side of tier boundary
   d3.range(0, cells.i.length, cellsX).forEach(function (c, i) {
     const lat = mapCoordinates.latN - (i / cellsY) * mapCoordinates.latT;
 
@@ -1088,10 +1087,13 @@ function generatePrecipitation() {
     }
   });
 
-  // distribute winds by direction
+  // H passes
   if (westerly.length) passWind(westerly, 120 * modifier, 1, cellsX);
   if (easterly.length) passWind(easterly, 120 * modifier, -1, cellsX);
+  const precH = cells.prec;
 
+  // V passes into a separate accumulator
+  cells.prec = new Uint8Array(cells.i.length);
   const vertT = southerly + northerly;
   if (northerly) {
     const bandN = ((Math.abs(mapCoordinates.latN) - 1) / 5) | 0;
@@ -1099,13 +1101,25 @@ function generatePrecipitation() {
     const maxPrecN = (northerly / vertT) * 60 * modifier * latModN;
     passWind(d3.range(0, cellsX, 1), maxPrecN, cellsX, cellsY);
   }
-
   if (southerly) {
     const bandS = ((Math.abs(mapCoordinates.latS) - 1) / 5) | 0;
     const latModS = mapCoordinates.latT > 60 ? d3.mean(latitudeModifier) : latitudeModifier[bandS];
     const maxPrecS = (southerly / vertT) * 60 * modifier * latModS;
     passWind(d3.range(cells.i.length - cellsX, cells.i.length, 1), maxPrecS, -cellsX, cellsY);
   }
+  const precV = cells.prec;
+
+  // Combine H and V: reduce when both contribute similarly (double-exposure artifact on corners)
+  const precCombined = new Uint8Array(cells.i.length);
+  for (let i = 0; i < cells.i.length; i++) {
+    const h = precH[i], v = precV[i];
+    const total = h + v;
+    if (!total) continue;
+    const balance = (2 * Math.min(h, v)) / total; // 0 = one-sided, 1 = equally from both
+    const factor = 1 - 0.2 * balance * balance; // soft curve, max ~20% reduction at perfect balance
+    precCombined[i] = minmax(Math.round(total * factor), 0, 255);
+  }
+  cells.prec = precCombined;
 
   // Vertical blur to smooth tier-boundary precipitation bands.
   // Only blurs north-south, so east-west rain-shadow structure is preserved.
@@ -1152,7 +1166,7 @@ function generatePrecipitation() {
         if (cells.h[current] < 20) {
           // water cell
           if (cells.h[current + next] >= 20) {
-            cells.prec[current + next] += Math.max(humidity / rand(30, 50), 1); // coastal precipitation
+            cells.prec[current + next] += Math.max(humidity / rand(15, 25), 1); // coastal precipitation
           } else {
             humidity = Math.min(humidity + 5 * modifier, maxPrec); // wind gets more humidity passing water cell
             cells.prec[current] += 5 * modifier; // water cells precipitation (need to correctly pour water through lakes)

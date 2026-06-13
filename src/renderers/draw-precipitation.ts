@@ -12,7 +12,7 @@ const LEGEND_PADDING = 8;
 const LEGEND_TEXT_OFFSET = 14;
 const LEGEND_W = 100;
 
-type PrecipitationMode = "cells" | "symbols";
+type PrecipitationMode = "cells" | "symbols" | "province";
 
 let precipitationMode: PrecipitationMode = "cells";
 
@@ -28,6 +28,8 @@ const precipitationRenderer = (): void => {
 
   if (precipitationMode === "cells") {
     drawCellsChoropleth();
+  } else if (precipitationMode === "province") {
+    drawProvinceChoropleth();
   } else {
     drawSymbols();
   }
@@ -96,6 +98,66 @@ function drawCellsChoropleth(): void {
   }
 }
 
+function getProvincePrecValues(): Float32Array {
+  const { cells: packCells } = pack;
+  const gridPrec = grid.cells.prec;
+  const gridG = packCells.g;
+  const n = packCells.i.length;
+
+  const provSum = new Float64Array(pack.provinces.length);
+  const provCount = new Uint32Array(pack.provinces.length);
+  for (const i of packCells.i) {
+    if (packCells.h[i] < 20) continue;
+    const p = packCells.province[i];
+    if (!p) continue;
+    provSum[p] += gridPrec[gridG[i]];
+    provCount[p]++;
+  }
+
+  const values = new Float32Array(n);
+  for (const i of packCells.i) {
+    if (packCells.h[i] < 20) continue;
+    const p = packCells.province[i];
+    if (!p || !provCount[p]) continue;
+    values[i] = provSum[p] / provCount[p];
+  }
+  return values;
+}
+
+function drawProvinceChoropleth(): void {
+  const { cells: packCells, vertices } = pack;
+  const values = getProvincePrecValues();
+  const thresholds = buildThresholds(values);
+  if (!thresholds.length) return;
+
+  const levels = thresholds.length;
+  const bucketPaths: string[] = new Array(levels + 1).fill("");
+
+  for (const i of packCells.i) {
+    if (!values[i]) continue;
+    let bucket = 1;
+    for (let j = levels - 1; j >= 0; j--) {
+      if (values[i] >= thresholds[j]) { bucket = j + 1; break; }
+    }
+    const polygon = (packCells.v[i] as number[]).map((v: number) => vertices.p[v] as [number, number]);
+    bucketPaths[bucket] += "M" + polygon.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join("L") + "Z";
+  }
+
+  for (let bucket = 1; bucket <= levels; bucket++) {
+    if (!bucketPaths[bucket]) continue;
+    const tFraction = (bucket - 1) / (levels - 1);
+    const fillColor = interpolateBlues(0.15 + tFraction * 0.85);
+    prec
+      .append("path")
+      .attr("d", bucketPaths[bucket])
+      .attr("fill", fillColor)
+      .attr("fill-opacity", 0.4 + tFraction * 0.45)
+      .attr("stroke", color(fillColor)!.darker(0.2).toString())
+      .attr("stroke-width", 0.3)
+      .attr("stroke-opacity", 0.5);
+  }
+}
+
 function drawSymbols(): void {
   const { cells, points } = grid;
   const cellsNumberModifier = ((window as any).pointsInput.dataset.cells / 10000) ** 0.25;
@@ -113,7 +175,7 @@ function drawSymbols(): void {
 }
 
 function drawLegend(): void {
-  const values = getPrecValues();
+  const values = precipitationMode === "province" ? getProvincePrecValues() : getPrecValues();
   const thresholds = buildThresholds(values);
   const levels = thresholds.length;
   if (!levels) return;
@@ -123,7 +185,7 @@ function drawLegend(): void {
   const x0 = 16;
   const y0 = graphHeight - legendH - 16;
 
-  const g = prec.append("g").attr("id", "precipLegend").attr("stroke", "none");
+  const g = prec.append("g").attr("id", "precipLegend").attr("stroke", "none").style("text-shadow", "none");
 
   g.append("rect")
     .attr("x", x0).attr("y", y0)
@@ -132,11 +194,12 @@ function drawLegend(): void {
 
   // Mode toggle buttons
   const toggleY = y0 + LEGEND_PADDING;
-  const btnW = (LEGEND_W - LEGEND_PADDING * 2) / 2;
+  const btnW = (LEGEND_W - LEGEND_PADDING * 2) / 3;
 
   const modes: { mode: PrecipitationMode; label: string }[] = [
     { mode: "cells", label: "Cells" },
     { mode: "symbols", label: "Symbols" },
+    { mode: "province", label: "Province" },
   ];
 
   modes.forEach(({ mode, label }, idx) => {
