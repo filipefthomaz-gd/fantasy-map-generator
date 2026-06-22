@@ -1400,10 +1400,37 @@
                 </td>
               </tr>
 
-              <tr data-tip="Select halo effect power (blur). Set to 0 to make it solid line" style="margin-bottom: 1em">
+              <tr data-tip="Select halo effect power (blur). Set to 0 to make it solid line" style="margin-bottom: 0.8em">
                 <td>Halo blur</td>
                 <td>
                   <slider-input id="styleStatesHaloBlur" min="0" max="10" step="0.01"></slider-input>
+                </td>
+              </tr>
+
+              <tr style="margin-top: 0.8em">
+                <td style="font-style: italic">
+                  Focus effect (applied when a state is pinned)
+                </td>
+              </tr>
+
+              <tr data-tip="Grayscale applied to non-focused states. 0: original color, 1: full grayscale">
+                <td>Focus grayscale</td>
+                <td>
+                  <slider-input id="stateFocusGrayscale" min="0" max="1" step="0.01" value="1"></slider-input>
+                </td>
+              </tr>
+
+              <tr data-tip="Brightness of non-focused states. 0: fully dark, 1: normal brightness">
+                <td>Focus dim</td>
+                <td>
+                  <slider-input id="stateFocusDim" min="0" max="1" step="0.01" value="0.6"></slider-input>
+                </td>
+              </tr>
+
+              <tr data-tip="Brightness boost for the pinned state. 1: no change, 1.5: brighter" style="margin-bottom: 1em">
+                <td>Focus brighten</td>
+                <td>
+                  <slider-input id="stateFocusBrighten" min="1" max="2" step="0.01" value="1.2"></slider-input>
                 </td>
               </tr>
             </tbody>

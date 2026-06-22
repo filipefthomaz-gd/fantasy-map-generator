@@ -945,6 +945,40 @@ styleStatesHaloBlur.on("input", e => {
   statesHalo.attr("filter", blur);
 });
 
+ensureEl("stateFocusGrayscale").on("input", applyStateFocusFilters);
+ensureEl("stateFocusDim").on("input", applyStateFocusFilters);
+ensureEl("stateFocusBrighten").on("input", applyStateFocusFilters);
+
+function applyStateFocusFilters() {
+  const focusedStates = new Set();
+  defs.selectAll("#fog path[id^='focusState']").each(function () {
+    const match = this.id.match(/focusState(\d+)/);
+    if (match) focusedStates.add(+match[1]);
+  });
+
+  statesFocusHighlight.selectAll("*").remove();
+
+  if (focusedStates.size === 0) {
+    statesBody.style("filter", null);
+    return;
+  }
+
+  const grayscale = +(document.getElementById("stateFocusGrayscale")?.value ?? 1);
+  const dim = +(document.getElementById("stateFocusDim")?.value ?? 0.6);
+  const brighten = +(document.getElementById("stateFocusBrighten")?.value ?? 1.2);
+
+  statesBody.style("filter", `grayscale(${grayscale * 100}%) brightness(${dim})`);
+
+  focusedStates.forEach(stateId => {
+    const sourceNode = statesBody.select("#state" + stateId).node();
+    if (!sourceNode) return;
+    const clone = sourceNode.cloneNode(false);
+    clone.id = "stateHighlight" + stateId;
+    if (brighten !== 1) clone.style.filter = `brightness(${brighten}) saturate(1.1)`;
+    statesFocusHighlight.node().appendChild(clone);
+  });
+}
+
 styleArmiesFillOpacity.on("input", e => {
   armies.attr("fill-opacity", e.target.value);
 });

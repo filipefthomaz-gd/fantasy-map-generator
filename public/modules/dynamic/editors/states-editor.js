@@ -587,8 +587,22 @@ function toggleFog(state, cl) {
   if (customization) return;
   const path = statesBody.select("#state" + state).attr("d"),
     id = "focusState" + state;
-  cl.contains("inactive") ? fog(id, path) : unfog(id);
+  const isFocusing = cl.contains("inactive");
+  isFocusing ? fog(id, path) : unfog(id);
   cl.toggle("inactive");
+  applyStateFocusFilters();
+  if (isFocusing) centerOnState(state);
+}
+
+
+function centerOnState(state) {
+  const node = statesBody.select("#state" + state).node();
+  if (!node) return;
+  const box = node.getBBox();
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const z = Math.min(svgWidth / box.width, svgHeight / box.height) * 0.7;
+  zoomTo(x, y, Math.max(1, Math.min(z, 8)), 1600);
 }
 
 function stateRemovePrompt(state) {
