@@ -390,6 +390,15 @@ async function parseLoadedData(data, mapVersion) {
       if (!climate.size()) {
         climate = viewbox.insert("g", "#population").attr("id", "climate").style("display", "none");
       }
+      if (!goods.size()) {
+        goods = viewbox.insert("g", "#markets").attr("id", "goods").style("display", "none");
+      }
+      if (!markets.size()) {
+        markets = viewbox.insert("g", "#emblems").attr("id", "markets");
+      }
+      if (!tradeAnimation.size()) {
+        tradeAnimation = viewbox.insert("g", "#ruler").attr("id", "tradeAnimation");
+      }
       conts = viewbox.select("#conts");
       if (!conts.size()) {
         conts = viewbox.insert("g", "#cults").attr("id", "conts");

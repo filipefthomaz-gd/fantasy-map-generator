@@ -1,6 +1,5 @@
 import type { Good } from "../generators/goods-generator";
 import { normalize, rn } from "../utils";
-import { getPackPolygon } from "../utils/graphUtils";
 
 const SUBGROUPS = ["goodsCells", "goodsIcons", "goodsBurgs"] as const;
 
@@ -50,38 +49,93 @@ function ensureSubgroups() {
 function buildGoodsCellsContent(displayedGoods: Set<number>): string {
   if (!displayedGoods.size) return "";
 
-  // First pass: accumulate total production per cell to find the global max
-  const cellTotals = new Map<number, { produced: Map<number, number>; total: number }>();
-  const biomeProduction = Goods.getBiomesProduction();
-  let maxTotal = 0;
-  for (const cellId of pack.cells.i) {
-    let total = 0;
-    const produced = Production.getCellProduction(cellId, biomeProduction);
-    const filteredProduced = Object.entries(produced).reduce((map, [goodId, amount]) => {
-      if (displayedGoods.has(+goodId)) {
-        map.set(+goodId, amount);
-        total += amount;
-      }
-      return map;
-    }, new Map<number, number>());
-    if (!total) continue;
+  // Pre-filter biomeProduction to only the displayed goods so getCellProduction
+  // skips irrelevant goods without having to look them up per cell.
+  const rawBiomeProduction = Goods.getBiomesProduction();
+  const biomeProduction: typeof rawBiomeProduction = {};
+  for (const biomeIdStr in rawBiomeProduction) {
+    const filtered = rawBiomeProduction[+biomeIdStr].filter(e => displayedGoods.has(e.goodId));
+    if (filtered.length) biomeProduction[+biomeIdStr] = filtered;
+  }
 
-    cellTotals.set(cellId, { produced: filteredProduced, total });
+  // First pass: accumulate total production and dominant good per cell
+  const cellTotals = new Map<number, { dominantGoodId: number; total: number }>();
+  let maxTotal = 0;
+
+  for (const cellId of pack.cells.i) {
+    // Skip zero-pop land cells without paying for getCellProduction
+    const isWater = pack.cells.h[cellId] < 20;
+    if (!isWater && !pack.cells.pop[cellId]) continue;
+
+    const produced = Production.getCellProduction(cellId, biomeProduction);
+
+    let total = 0;
+    let dominantGoodId = 0;
+    let dominantAmount = 0;
+    for (const goodIdStr in produced) {
+      const goodId = +goodIdStr;
+      if (!displayedGoods.has(goodId)) continue;
+      const amount = produced[goodId];
+      if (amount <= 0) continue;
+      total += amount;
+      if (amount > dominantAmount) {
+        dominantAmount = amount;
+        dominantGoodId = goodId;
+      }
+    }
+    if (!total || !dominantGoodId) continue;
+
+    cellTotals.set(cellId, { dominantGoodId, total });
     if (total > maxTotal) maxTotal = total;
   }
   if (maxTotal === 0) return "";
 
-  // Second pass: render polygons with opacity normalized against the global max
-  let html = "";
-  for (const [cellId, { produced, total }] of cellTotals) {
-    const opacity = 0.1 + 0.9 * normalize(total, 0, maxTotal);
-    const points = getPackPolygon(cellId, pack).join(" ");
-    for (const [goodId, amount] of produced) {
-      if (amount <= 0) continue;
-      const good = Goods.get(goodId);
-      if (!good) continue;
-      html += `<polygon points="${points}" fill="${good.color}" fill-opacity="${rn(opacity, 2)}"/>`;
+  // Second pass: bucket cells by (goodId × opacity level) and build one <path>
+  // per bucket — reduces potentially 20 000 <polygon> elements to at most
+  // goods × OPACITY_BUCKETS elements (e.g. 20 goods × 10 = 200 paths).
+  const OPACITY_BUCKETS = 10;
+  const { cells: packCells, vertices } = pack;
+
+  // key: `${goodId}|${bucket}` → accumulated path d string
+  const bucketPaths = new Map<string, string>();
+
+  for (const [cellId, { dominantGoodId, total }] of cellTotals) {
+    const good = Goods.get(dominantGoodId);
+    if (!good) continue;
+
+    const t = normalize(total, 0, maxTotal);
+    const bucket = Math.min(OPACITY_BUCKETS - 1, Math.floor(t * OPACITY_BUCKETS));
+    const key = `${dominantGoodId}|${bucket}`;
+
+    // Build the cell's path sub-string directly from vertex data (no intermediate array)
+    const verts = packCells.v[cellId] as number[];
+    let sub = "M";
+    for (let vi = 0; vi < verts.length; vi++) {
+      const [x, y] = vertices.p[verts[vi]] as [number, number];
+      if (vi) sub += "L";
+      sub += `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
     }
+    sub += "Z";
+
+    const existing = bucketPaths.get(key);
+    bucketPaths.set(key, existing ? existing + sub : sub);
+  }
+
+  // Emit one <path> per bucket — sorted so lighter bands render first
+  const sorted = [...bucketPaths.entries()].sort((a, b) => {
+    const ba = +a[0].split("|")[1];
+    const bb = +b[0].split("|")[1];
+    return ba - bb;
+  });
+
+  let html = "";
+  for (const [key, d] of sorted) {
+    const [goodIdStr, bucketStr] = key.split("|");
+    const good = Goods.get(+goodIdStr);
+    if (!good) continue;
+    const t = (+bucketStr + 0.5) / OPACITY_BUCKETS;
+    const opacity = rn(0.1 + 0.9 * t, 2);
+    html += `<path d="${d}" fill="${good.color}" fill-opacity="${opacity}" stroke="none"/>`;
   }
   return html;
 }

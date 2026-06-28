@@ -334,35 +334,6 @@ function togglePrecipitation(event) {
   }
 }
 
-function drawPrecipitation() {
-  TIME && console.time("drawPrecipitation");
-
-  prec.selectAll("circle").remove();
-  const { cells, points } = grid;
-
-  const show = d3.transition().duration(800).ease(d3.easeSinIn);
-  prec.selectAll("text").attr("opacity", 0).transition(show).attr("opacity", 1);
-
-  const cellsNumberModifier = (pointsInput.dataset.cells / 10000) ** 0.25;
-  const data = cells.i.filter(i => cells.h[i] >= 20 && cells.prec[i]);
-  const getRadius = prec => rn(Math.sqrt(prec / 4) / cellsNumberModifier, 2);
-
-  prec
-    .style("display", "block")
-    .selectAll("circle")
-    .data(data)
-    .enter()
-    .append("circle")
-    .attr("cx", d => points[d][0])
-    .attr("cy", d => points[d][1])
-    .attr("r", 0)
-    .transition(show)
-    .attr("r", d => getRadius(cells.prec[d]));
-
-  TIME && console.timeEnd("drawPrecipitation");
-}
-
-
 function togglePopulation(event) {
   if (!population.selectAll("path").size()) {
     turnButtonOn("togglePopulation");
@@ -375,45 +346,6 @@ function togglePopulation(event) {
   }
 }
 
-function drawPopulation() {
-  population.selectAll("line").remove();
-
-  const { cells, burgs } = pack;
-  const show = d3.transition().duration(2000).ease(d3.easeSinIn);
-
-  const rural = Array.from(
-    cells.i.filter(i => cells.pop[i] > 0),
-    i => [...cells.p[i], cells.p[i][1] - cells.pop[i] / 5]
-  );
-
-  population
-    .select("#rural")
-    .selectAll("line")
-    .data(rural)
-    .enter()
-    .append("line")
-    .attr("x1", d => d[0])
-    .attr("y1", d => d[1])
-    .attr("x2", d => d[0])
-    .attr("y2", d => d[1])
-    .transition(show)
-    .attr("y2", d => d[2]);
-
-  const urban = burgs.filter(b => b.i && !b.removed).map(b => [b.x, b.y, b.y - (b.population / 5) * urbanization]);
-  population
-    .select("#urban")
-    .selectAll("line")
-    .data(urban)
-    .enter()
-    .append("line")
-    .attr("x1", d => d[0])
-    .attr("y1", d => d[1])
-    .attr("x2", d => d[0])
-    .attr("y2", d => d[1])
-    .transition(show)
-    .delay(500)
-    .attr("y2", d => d[2]);
-}
 
 
 function toggleCells(event) {

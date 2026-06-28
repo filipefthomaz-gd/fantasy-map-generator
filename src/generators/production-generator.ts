@@ -1,4 +1,3 @@
-import { sum } from "d3";
 import { minmax } from "../utils";
 import type { Burg } from "./burgs-generator";
 import { DEFAULT_CULTURE_TYPE } from "./cultures-generator";
@@ -691,7 +690,13 @@ export class ProductionModule {
     };
 
     const isWater = pack.cells.h[cellId] < 20;
-    const pop = isWater ? sum(pack.cells.c[cellId].map(c => pack.cells.pop[c])) || 0 : pack.cells.pop[cellId];
+    let pop: number;
+    if (isWater) {
+      pop = 0;
+      for (const nc of pack.cells.c[cellId]) pop += pack.cells.pop[nc];
+    } else {
+      pop = pack.cells.pop[cellId];
+    }
 
     if (pop > 0) {
       for (const { goodId, production } of biomeProduction[pack.cells.biome[cellId]] || []) {
