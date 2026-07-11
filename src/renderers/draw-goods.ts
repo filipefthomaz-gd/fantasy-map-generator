@@ -63,9 +63,17 @@ function buildGoodsCellsContent(displayedGoods: Set<number>): string {
   let maxTotal = 0;
 
   for (const cellId of pack.cells.i) {
-    // Skip zero-pop land cells without paying for getCellProduction
     const isWater = pack.cells.h[cellId] < 20;
-    if (!isWater && !pack.cells.pop[cellId]) continue;
+    if (isWater) {
+      // Skip water cells with no populated neighbours — avoids getCellProduction for deep ocean
+      let hasNeighborPop = false;
+      for (const nc of pack.cells.c[cellId]) {
+        if (pack.cells.pop[nc]) { hasNeighborPop = true; break; }
+      }
+      if (!hasNeighborPop) continue;
+    } else if (!pack.cells.pop[cellId]) {
+      continue;
+    }
 
     const produced = Production.getCellProduction(cellId, biomeProduction);
 
@@ -96,18 +104,14 @@ function buildGoodsCellsContent(displayedGoods: Set<number>): string {
   const OPACITY_BUCKETS = 10;
   const { cells: packCells, vertices } = pack;
 
-  // key: `${goodId}|${bucket}` → accumulated path d string
-  const bucketPaths = new Map<string, string>();
+  // Numeric key: goodId * OPACITY_BUCKETS + bucket → string[] of sub-paths (push is O(1))
+  const bucketParts = new Map<number, string[]>();
 
   for (const [cellId, { dominantGoodId, total }] of cellTotals) {
-    const good = Goods.get(dominantGoodId);
-    if (!good) continue;
-
     const t = normalize(total, 0, maxTotal);
     const bucket = Math.min(OPACITY_BUCKETS - 1, Math.floor(t * OPACITY_BUCKETS));
-    const key = `${dominantGoodId}|${bucket}`;
+    const key = dominantGoodId * OPACITY_BUCKETS + bucket;
 
-    // Build the cell's path sub-string directly from vertex data (no intermediate array)
     const verts = packCells.v[cellId] as number[];
     let sub = "M";
     for (let vi = 0; vi < verts.length; vi++) {
@@ -117,34 +121,34 @@ function buildGoodsCellsContent(displayedGoods: Set<number>): string {
     }
     sub += "Z";
 
-    const existing = bucketPaths.get(key);
-    bucketPaths.set(key, existing ? existing + sub : sub);
+    const parts = bucketParts.get(key);
+    if (parts) parts.push(sub);
+    else bucketParts.set(key, [sub]);
   }
 
   // Emit one <path> per bucket — sorted so lighter bands render first
-  const sorted = [...bucketPaths.entries()].sort((a, b) => {
-    const ba = +a[0].split("|")[1];
-    const bb = +b[0].split("|")[1];
-    return ba - bb;
-  });
+  const sorted = [...bucketParts.entries()].sort((a, b) => (a[0] % OPACITY_BUCKETS) - (b[0] % OPACITY_BUCKETS));
 
-  let html = "";
-  for (const [key, d] of sorted) {
-    const [goodIdStr, bucketStr] = key.split("|");
-    const good = Goods.get(+goodIdStr);
+  const html: string[] = [];
+  for (const [key, parts] of sorted) {
+    const goodId = Math.floor(key / OPACITY_BUCKETS);
+    const bucket = key % OPACITY_BUCKETS;
+    const good = Goods.get(goodId);
     if (!good) continue;
-    const t = (+bucketStr + 0.5) / OPACITY_BUCKETS;
-    const opacity = rn(0.1 + 0.9 * t, 2);
-    html += `<path d="${d}" fill="${good.color}" fill-opacity="${opacity}" stroke="none"/>`;
+    const opacity = rn(0.1 + 0.9 * (bucket + 0.5) / OPACITY_BUCKETS, 2);
+    html.push(`<path d="${parts.join("")}" fill="${good.color}" fill-opacity="${opacity}" stroke="none"/>`);
   }
-  return html;
+  return html.join("");
 }
 
 function buildGoodsIconsContent(displayedGoods: Set<number>): string {
   if (!displayedGoods.size || !pack.cells.good) return "";
 
   const drawCircle = +goods.select("#goodsIcons").attr("data-circle");
-  let html = "";
+  // Cache stroke colors — getStroke calls d3.color().darker().hex() and there are only ~20 colors
+  const strokeCache = new Map<string, string>();
+
+  const html: string[] = [];
   for (const cellId of pack.cells.i) {
     const goodId = pack.cells.good[cellId];
     if (!goodId || !displayedGoods.has(goodId)) continue;
@@ -152,12 +156,16 @@ function buildGoodsIconsContent(displayedGoods: Set<number>): string {
     if (!good) continue;
 
     const [x, y] = pack.cells.p[cellId];
-    const stroke = Goods.getStroke(good.color);
-    html += `<g data-i="${good.i}">${
+    let stroke = strokeCache.get(good.color);
+    if (stroke === undefined) {
+      stroke = Goods.getStroke(good.color);
+      strokeCache.set(good.color, stroke);
+    }
+    html.push(`<g data-i="${good.i}">${
       drawCircle ? `<circle cx="${x}" cy="${y}" r="${HALF}" fill="${good.color}" stroke="${stroke}" />` : ""
-    }<use href="#${good.icon}" x="${x - HALF}" y="${y - HALF}" width="${SIZE}" height="${SIZE}"/></g>`;
+    }<use href="#${good.icon}" x="${x - HALF}" y="${y - HALF}" width="${SIZE}" height="${SIZE}"/></g>`);
   }
-  return html;
+  return html.join("");
 }
 
 function buildGoodsBurgsContent(displayedGoods: Set<number>): string {

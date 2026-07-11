@@ -990,17 +990,19 @@ function applyStateFocusFilters() {
 
   const grayscale = +(document.getElementById("stateFocusGrayscale")?.value ?? 1);
   const dim = +(document.getElementById("stateFocusDim")?.value ?? 0.6);
-  const brighten = +(document.getElementById("stateFocusBrighten")?.value ?? 1.2);
 
   statesBody.style("filter", `grayscale(${grayscale * 100}%) brightness(${dim})`);
 
+  const highlightNode = statesFocusHighlight.node();
   focusedStates.forEach(stateId => {
-    const sourceNode = statesBody.select("#state" + stateId).node();
-    if (!sourceNode) return;
-    const clone = sourceNode.cloneNode(false);
-    clone.id = "stateHighlight" + stateId;
-    if (brighten !== 1) clone.style.filter = `brightness(${brighten}) saturate(1.1)`;
-    statesFocusHighlight.node().appendChild(clone);
+    for (const id of [`state${stateId}`, `state-gap${stateId}`]) {
+      const source = statesBody.select("#" + id).node();
+      if (!source) continue;
+      const clone = source.cloneNode(false);
+      clone.id = "stateHighlight" + id;
+      clone.style.filter = "";
+      highlightNode.appendChild(clone);
+    }
   });
 }
 
