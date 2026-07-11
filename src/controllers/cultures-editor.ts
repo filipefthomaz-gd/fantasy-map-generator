@@ -1,4 +1,5 @@
-import { csvParse, drag, easeSinIn, pointer, transition } from "d3";
+import { csvParse, drag, easeSinIn, pointer, select, transition } from "d3";
+import { Controllers } from "@/controllers";
 import {
   abbreviate,
   capitalize,
@@ -19,7 +20,8 @@ let culturesManualHistory: string[] = [];
 
 const cultureTypes = ["Generic", "River", "Lake", "Naval", "Nomadic", "Hunting", "Highland"];
 
-export function open(): void {
+function open(): void {
+  if (customization) return;
   closeDialogs("#culturesEditor, .stable");
   if (!layerIsOn("toggleCultures")) toggleCultures();
   if (layerIsOn("toggleStates")) toggleStates();
@@ -103,7 +105,7 @@ function addListeners(): void {
   ensureEl("culturesManuallyUndo").on("click", undoCulturesManualAssignment);
   ensureEl("culturesManuallyApply").on("click", applyCultureManualAssignent);
   ensureEl("culturesManuallyCancel").on("click", () => exitCulturesManualAssignment());
-  ensureEl("culturesEditNamesBase").on("click", window.NamesbaseEditor.open);
+  ensureEl("culturesEditNamesBase").on("click", () => Controllers.NamesbaseEditor.open());
   ensureEl("culturesAdd").on("click", enterAddCulturesMode);
   ensureEl("culturesExport").on("click", downloadCulturesCsv);
   ensureEl("culturesImport").on("click", () => ensureEl("culturesCSVToLoad").click());
@@ -594,8 +596,9 @@ function cultureRemovePrompt(this: HTMLElement): void {
 
 function drawCultureCenters(): void {
   const tooltip = "Drag to move the culture center (ancestral home)";
-  debug.select("#cultureCenters").remove();
-  const cultureCenters = debug
+  const debugLayer = select("#debug");
+  debugLayer.select("#cultureCenters").remove();
+  const cultureCenters = debugLayer
     .append("g")
     .attr("id", "cultureCenters")
     .attr("stroke-width", 0.8)
@@ -681,7 +684,6 @@ function togglePercentageMode(): void {
 
 async function showHierarchy(): Promise<void> {
   if (customization) return;
-  const HeirarchyTree = await window.lazy.hierarchyTree();
 
   const getDescription = (culture: any) => {
     const { name, type, rural, urban } = culture;
@@ -701,7 +703,7 @@ async function showHierarchy(): Promise<void> {
     if (type === "Hunting") return "pentagon";
   };
 
-  HeirarchyTree.open({
+  Controllers.HierarchyTree.open({
     type: "cultures",
     data: pack.cultures as any,
     onNodeEnter: cultureHighlightOn,
@@ -744,7 +746,7 @@ function enterCultureManualAssignent(): void {
   $("#culturesEditor").dialog({ position: { my: "right top", at: "right-10 top+10", of: "svg" } });
 
   tip("Click on culture to select, drag the circle to change culture", true);
-  viewbox
+  select<SVGElement, unknown>("#viewbox")
     .style("cursor", "crosshair")
     .on("click", selectCultureOnMapClick)
     .call(drag<SVGElement, unknown>().on("start", dragCultureBrush))
@@ -888,7 +890,7 @@ function enterAddCulturesMode(this: HTMLElement): void {
   customization = 9;
   this.classList.add("pressed");
   tip("Click on the map to add a new culture", true);
-  viewbox.style("cursor", "crosshair").on("click", addCulture);
+  select<SVGElement, unknown>("#viewbox").style("cursor", "crosshair").on("click", addCulture);
   $body.querySelectorAll<HTMLElement>("div > input, select, span, svg").forEach(e => {
     e.style.pointerEvents = "none";
   });
@@ -905,7 +907,7 @@ function exitAddCultureMode(): void {
   if (culturesAdd.classList.contains("pressed")) culturesAdd.classList.remove("pressed");
 }
 
-function addCulture(this: any, event: any): void {
+function addCulture(this: SVGElement, event: MouseEvent): void {
   const point = pointer(event, this);
   const center = findCell(point[0], point[1])!;
 
@@ -1053,3 +1055,5 @@ function updateLockStatus(this: HTMLElement): void {
   classList.toggle("icon-lock-open");
   classList.toggle("icon-lock");
 }
+
+export const CulturesEditor = { open };

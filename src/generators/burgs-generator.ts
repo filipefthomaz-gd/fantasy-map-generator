@@ -32,6 +32,7 @@ export interface Burg {
   MFCG?: string;
 
   airport?: number;
+  station?: number;
   production?: ProductionRecord[]; // per-burg production/trade records from the last production run
   product?: number; // gross product from the last production run
   treasury?: number; // accumulated cash balance
@@ -569,14 +570,14 @@ class BurgModule {
     const arableBiomes = river ? [1, 2, 3, 4, 5, 6, 7, 8] : [5, 6, 7, 8];
     const farms = +arableBiomes.includes(cells.biome[cell]);
 
-    const citadel = +(burg.citadel as number);
-    const urban_castle = +(citadel && each(2)(i as number));
+    const citadel = Number(burg.citadel ?? 0);
+    const urban_castle = Number(citadel && each(2)(i as number));
 
-    const hub = Routes.isCrossroad(cell);
-    const walls = +(burg.walls as number);
-    const plaza = +(burg.plaza as number);
-    const temple = +(burg.temple as number);
-    const shantytown = +(burg.shanty as number);
+    const hub = Number(Routes.isCrossroad(cell));
+    const walls = Number(burg.walls ?? 0);
+    const plaza = Number(burg.plaza ?? 0);
+    const temple = Number(burg.temple ?? 0);
+    const shantytown = Number(burg.shanty ?? 0);
 
     const style = "natural";
 
@@ -593,10 +594,10 @@ class BurgModule {
       urban_castle: urban_castle.toString(),
       hub: hub.toString(),
       plaza: plaza.toString(),
+      greens: plaza ? "1" : "0",
       temple: temple.toString(),
       walls: walls.toString(),
       shantytown: shantytown.toString(),
-      gates: (-1).toString(),
       style
     }).toString();
     if (sea) url.searchParams.append("sea", sea.toString());
@@ -751,7 +752,7 @@ class BurgModule {
     return burgId;
   }
 
-  changeGroup(burg: Burg, group: string | null) {
+  changeGroup(burg: Burg, group: string | null = null) {
     if (group) {
       burg.group = group;
     } else {

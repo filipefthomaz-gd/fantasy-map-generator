@@ -20,7 +20,7 @@ import type { Province } from "../generators/provinces-generator";
 import type { State } from "../generators/states-generator";
 import { ensureEl, rn } from "../utils";
 
-export function open(cells: number[], routeLen: number, isRiver: boolean): void {
+function open(cells: number[], routeLen: number, isRiver: boolean): void {
   closeDialogs("#elevationProfile, .stable");
   ensureEl("epCurve").on("change", draw);
   ensureEl("epSave").on("click", downloadCSV);
@@ -564,12 +564,4 @@ export function open(cells: number[], routeLen: number, isRiver: boolean): void 
   }
 }
 
-declare global {
-  interface Window {
-    ElevationProfile: {
-      open: (cells: number[], routeLen: number, isRiver: boolean) => void;
-    };
-  }
-}
-
-window.ElevationProfile = { open };
+export const ElevationProfile = { open };

@@ -21,7 +21,7 @@ function restoreNamesbaseSnapshot(snapshot: any[]): void {
 
 addListeners();
 
-export function open(): void {
+function open(): void {
   if (customization) return;
   closeDialogs("#namesbaseEditor, .stable");
 
@@ -408,10 +408,4 @@ interface ParseError {
   error: string;
 }
 
-declare global {
-  interface Window {
-    NamesbaseEditor: { open: () => void };
-  }
-}
-
-window.NamesbaseEditor = { open };
+export const NamesbaseEditor = { open };

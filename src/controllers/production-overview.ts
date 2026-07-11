@@ -8,7 +8,8 @@ import { formatPrice, rn } from "../utils";
 
 type Type = "MFG" | "BUY" | "SELL" | "LOCAL";
 
-export function open(burgId: number): void {
+function open(burgId: number): void {
+  if (customization) return;
   const burg = pack.burgs[burgId];
   if (!burg || burg.removed) {
     tip("Invalid burg. The selected burg does not exist or was removed.", true, "error", 5000);
@@ -401,10 +402,4 @@ export function open(burgId: number): void {
   });
 }
 
-declare global {
-  interface Window {
-    ProductionOverview: { open: typeof open };
-  }
-}
-
-window.ProductionOverview = { open };
+export const ProductionOverview = { open };

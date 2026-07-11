@@ -8,7 +8,7 @@ import { ensureEl, formatPrice, rn } from "../utils";
 let isInitialized = false;
 let activeBatch: TradeBatch;
 
-export function open(batch: TradeBatch): void {
+function open(batch: TradeBatch): void {
   if (!batch?.deals.length) return;
 
   activeBatch = batch;
@@ -112,10 +112,4 @@ function closeTradeDetails(): void {
   clearHighlight();
 }
 
-declare global {
-  interface Window {
-    TradeDetails: { open: typeof open };
-  }
-}
-
-window.TradeDetails = { open };
+export const TradeDetails = { open };

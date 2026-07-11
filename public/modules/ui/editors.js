@@ -21,21 +21,19 @@ function clicked() {
   if (!ancestor) return;
 
   if (grand.id === "emblems") editEmblem();
-  else if (parent.id === "rivers") editRiver(el.id);
-  else if (grand.id === "routes") editRoute(el.id);
+  else if (parent.id === "rivers") window.Controllers.RiverEditor.open(el.id);
+  else if (grand.id === "routes") window.Controllers.RouteEditor.open(el.id);
   else if (ancestor.id === "labels" && el.tagName === "tspan") editLabel();
-  else if (grand.id === "burgLabels") editBurg();
-  else if (grand.id === "burgIcons") editBurg();
+  else if (grand.id === "burgLabels" || grand.id === "burgIcons") window.Controllers.BurgEditor.open(el.dataset.id);
   else if (parent.id === "ice") editIce(el);
   else if (parent.id === "terrain") editReliefIcon();
   else if (grand.id === "markers" || great.id === "markers") editMarker();
-  else if (grand.id === "markets" && el.tagName !== "path") MarketOverview.open(Number(parent.dataset.id));
-  else if (grand.id === "goodsIcons") GoodsEditor.open();
-  else if (parent.id === "goodsCells") GoodsEditor.open();
-  else if (grand.id === "goodsBurgs") ProductionOverview.open(Number(parent.dataset.id));
+  else if (grand.id === "markets" && el.tagName !== "path") window.Controllers.MarketOverview.open(Number(parent.dataset.id));
+  else if (grand.id === "goodsIcons" || parent.id === "goodsCells") window.Controllers.GoodsEditor.open();
+  else if (grand.id === "goodsBurgs") window.Controllers.ProductionOverview.open(Number(parent.dataset.id));
   else if (grand.id === "coastline") editCoastline();
   else if (grand.id === "lakes") editLake();
-  else if (great.id === "armies") editRegiment();
+  else if (great.id === "armies") window.Controllers.RegimentEditor.open("#" + parent.id);
 }
 
 // clear elSelected variable
@@ -1002,37 +1000,8 @@ function refreshAllEditors() {
 }
 
 // dynamically loaded editors
-async function editStates() {
-  if (customization) return;
-  const Editor = await window.lazy.statesEditor();
-  Editor.open();
-}
-
-async function editCultures() {
-  if (customization) return;
-  const Editor = await window.lazy.culturesEditor();
-  Editor.open();
-}
-
 async function editContinents() {
   if (customization) return;
   const Editor = await import("../dynamic/editors/continents-editor.js");
   Editor.open();
-}
-
-async function editReligions() {
-  if (customization) return;
-  const Editor = await window.lazy.religionsEditor();
-  Editor.open();
-}
-
-// TS-migrated editors. TODO: import from module when editors.js is migrated to TS
-function editCoastlineSettings() {
-  if (customization) return;
-  window.CoastlineEditor.open();
-}
-
-function editTradeAnimation() {
-  if (customization) return;
-  window.TradeAnimationEditor.open();
 }

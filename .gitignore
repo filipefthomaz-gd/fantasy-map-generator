@@ -1,6 +1,7 @@
 .claude
 .vscode
 .idea
+.claude/worktrees
 /node_modules
 */node_modules
 /dist

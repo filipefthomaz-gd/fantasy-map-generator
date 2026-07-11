@@ -1,4 +1,5 @@
-import { drag, easeSinIn, pointer, transition } from "d3";
+import { drag, easeSinIn, pointer, select, transition } from "d3";
+import { Controllers } from "@/controllers";
 import {
   abbreviate,
   debounce,
@@ -14,7 +15,8 @@ import {
 const $body = insertEditorHtml();
 addListeners();
 
-export function open(): void {
+function open(): void {
+  if (customization) return;
   closeDialogs("#religionsEditor, .stable");
   if (!layerIsOn("toggleReligions")) toggleReligions();
   if (layerIsOn("toggleStates")) toggleStates();
@@ -543,8 +545,9 @@ function removeReligion(religionId: number): void {
 }
 
 function drawReligionCenters(): void {
-  debug.select("#religionCenters").remove();
-  const religionCenters = debug
+  const debugLayer = select("#debug");
+  debugLayer.select("#religionCenters").remove();
+  const religionCenters = debugLayer
     .append("g")
     .attr("id", "religionCenters")
     .attr("stroke-width", 0.8)
@@ -630,7 +633,6 @@ function togglePercentageMode(): void {
 
 async function showHierarchy(): Promise<void> {
   if (customization) return;
-  const HeirarchyTree = await window.lazy.hierarchyTree();
 
   const getDescription = (religion: any) => {
     const { name, type, form, rural, urban } = religion;
@@ -656,7 +658,7 @@ async function showHierarchy(): Promise<void> {
     if (type === "Heresy") return "diamond";
   };
 
-  HeirarchyTree.open({
+  Controllers.HierarchyTree.open({
     type: "religions",
     data: pack.religions as any,
     onNodeEnter: religionHighlightOn,
@@ -694,7 +696,7 @@ function enterReligionsManualAssignent(): void {
   $("#religionsEditor").dialog({ position: { my: "right top", at: "right-10 top+10", of: "svg" } });
 
   tip("Click on religion to select, drag the circle to change religion", true);
-  viewbox
+  select<SVGElement, unknown>("#viewbox")
     .style("cursor", "crosshair")
     .on("click", selectReligionOnMapClick)
     .call(drag<SVGElement, unknown>().on("start", dragReligionBrush))
@@ -821,7 +823,7 @@ function enterAddReligionMode(this: HTMLElement): void {
   customization = 8;
   this.classList.add("pressed");
   tip("Click on the map to add a new religion", true);
-  viewbox.style("cursor", "crosshair").on("click", addReligion);
+  select<SVGElement, unknown>("#viewbox").style("cursor", "crosshair").on("click", addReligion);
   $body.querySelectorAll<HTMLElement>("div > input, select, span, svg").forEach(e => {
     e.style.pointerEvents = "none";
   });
@@ -838,7 +840,7 @@ function exitAddReligionMode(): void {
   if (religionsAdd.classList.contains("pressed")) religionsAdd.classList.remove("pressed");
 }
 
-function addReligion(this: any, event: any): void {
+function addReligion(this: SVGElement, event: MouseEvent): void {
   const [x, y] = pointer(event, this);
   const center = findCell(x, y)!;
   if (pack.cells.h[center] < 20) {
@@ -913,3 +915,5 @@ function closeReligionsEditor(): void {
   exitReligionsManualAssignment("close");
   exitAddReligionMode();
 }
+
+export const ReligionsEditor = { open };

@@ -22,5 +22,4 @@ import "./goods-generator";
 import "./production-generator";
 import "./markets-generator";
 import "../renderers/draw-goods";
-import "../controllers/goods-editor";
 import "./resample";

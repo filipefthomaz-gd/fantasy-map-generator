@@ -1,4 +1,5 @@
-import { color, pointer } from "d3";
+import { color, drag, pointer, select } from "d3";
+import { Controllers } from "@/controllers";
 import type { Burg } from "../generators/burgs-generator";
 import type { Deal, Market } from "../generators/markets-generator";
 import { highlightMarketOff, highlightMarketOn } from "../renderers/draw-markets";
@@ -9,7 +10,7 @@ let isInitialized = false;
 let marketsWorking: Uint16Array | null = null;
 let marketsManualHistory: Uint16Array[] = [];
 
-export function open(): void {
+function open(): void {
   if (customization) return;
   closeDialogs("#marketsOverview, .stable");
   if (!layerIsOn("toggleMarketsLayer")) toggleMarketsLayer();
@@ -27,7 +28,7 @@ export function open(): void {
   if (!isInitialized) {
     ensureEl("marketsOverviewRefresh").on("click", marketsOverviewAddLines);
     ensureEl("marketsOverviewExport").on("click", downloadMarketsCsv);
-    ensureEl("marketsOverviewCompare").on("click", () => window.ComparePrices.open());
+    ensureEl("marketsOverviewCompare").on("click", () => Controllers.ComparePrices.open());
     ensureEl("marketsOverviewPercentage").on("click", togglePercentageMode);
     ensureEl("marketsManually").on("click", () => {
       if (customization === 15) exitMarketsManualAssignment(false);
@@ -72,7 +73,7 @@ export function open(): void {
         line.classList.add("selected");
       } else if (marketId) {
         // marketId 0 is the non-editable "No market" summary row — no detail dialog
-        window.MarketOverview.open(marketId);
+        Controllers.MarketOverview.open(marketId);
       }
     });
 
@@ -181,10 +182,10 @@ function enterMarketsManualAssignment(): void {
   const firstRow = ensureEl("marketsOverviewBody").querySelector<HTMLElement>('.states.market:not([data-id="0"])');
   if (firstRow) firstRow.classList.add("selected");
 
-  viewbox
+  select<SVGElement, unknown>("#viewbox")
     .style("cursor", "crosshair")
     .on("click", selectMarketOnMapClick)
-    .call((window as any).d3.drag().on("start", startMarketsBrushDrag))
+    .call(drag<SVGElement, unknown>().on("start", startMarketsBrushDrag))
     .on("touchmove mousemove", onMarketsBrushMove);
 
   $("#marketsOverview").dialog({ position: { my: "right top", at: "right-10 top+10", of: "svg", collision: "fit" } });
@@ -211,8 +212,8 @@ function renderNoMarketRow(): string {
   </div>`;
 }
 
-function selectMarketOnMapClick(this: SVGElement): void {
-  const [x, y] = pointer(window.event!, this);
+function selectMarketOnMapClick(this: SVGElement, event: MouseEvent): void {
+  const [x, y] = pointer(event, this);
   const cellId = findCell(x, y);
   if (cellId === undefined) return;
 
@@ -223,7 +224,7 @@ function selectMarketOnMapClick(this: SVGElement): void {
   body.querySelector<HTMLElement>(`.states.market[data-id="${marketId}"]`)?.classList.add("selected");
 }
 
-function startMarketsBrushDrag(this: SVGElement): void {
+function startMarketsBrushDrag(this: SVGElement, event: any): void {
   const selectedRow = ensureEl("marketsOverviewBody").querySelector<HTMLElement>(".states.market.selected");
   if (!selectedRow) return;
   const marketId = +selectedRow.dataset.id!;
@@ -233,10 +234,9 @@ function startMarketsBrushDrag(this: SVGElement): void {
   saveMarketsManualSnapshot();
   const r = +ensureEl<HTMLInputElement>("marketsBrush").value;
 
-  (window as any).d3.event.on("drag", () => {
-    const d3ev = (window as any).d3.event;
-    if (!d3ev.dx && !d3ev.dy) return;
-    const [x, y] = pointer(window.event!, this);
+  event.on("drag", (dragEvent: any) => {
+    if (!dragEvent.dx && !dragEvent.dy) return;
+    const [x, y] = pointer(dragEvent, this);
     moveCircle(x, y, r);
 
     const found = r > 5 ? findAllCellsInRadius(x, y, r, pack) : [findClosestCell(x, y, Infinity, pack)];
@@ -306,9 +306,9 @@ function setMarketTempPath(temp: HTMLElement, marketId: number, d: string): void
   path.setAttribute("d", d);
 }
 
-function onMarketsBrushMove(this: SVGElement): void {
+function onMarketsBrushMove(this: SVGElement, event: MouseEvent): void {
   showMainTip();
-  const [x, y] = pointer(window.event!, this);
+  const [x, y] = pointer(event, this);
   const r = +ensureEl<HTMLInputElement>("marketsBrush").value;
   moveCircle(x, y, r);
 }
@@ -365,7 +365,7 @@ function enterAddMarketMode(): void {
   customization = 16;
   ensureEl("marketsAdd").classList.add("pressed");
   tip("Click on a burg on the map to create a new market there. Hold Shift to add multiple", true);
-  viewbox.style("cursor", "crosshair").on("click", addMarketOnClick);
+  select<SVGElement, unknown>("#viewbox").style("cursor", "crosshair").on("click", addMarketOnClick);
 }
 
 function exitAddMarketMode(): void {
@@ -375,8 +375,7 @@ function exitAddMarketMode(): void {
   clearMainTip();
 }
 
-function addMarketOnClick(this: SVGElement): void {
-  const ev = window.event as MouseEvent;
+function addMarketOnClick(this: SVGElement, ev: MouseEvent): void {
   const [x, y] = pointer(ev, this);
   const cellId = findCell(x, y);
   if (cellId === undefined) return;
@@ -581,10 +580,4 @@ function closeMarketsOverview(): void {
   ensureEl("marketsOverviewBody").innerHTML = "";
 }
 
-declare global {
-  interface Window {
-    MarketsOverview: { open: typeof open };
-  }
-}
-
-window.MarketsOverview = { open };
+export const MarketsOverview = { open };

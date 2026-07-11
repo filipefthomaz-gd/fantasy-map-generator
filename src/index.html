@@ -1446,10 +1446,24 @@
               </tr>
             </tbody>
             <tbody id="styleGoods" style="display: none">
+              <tr data-tip="Set good marker (icon and circle) size in pixels">
+                <td>Marker size</td>
+                <td>
+                  <slider-input id="styleGoodsSize" min="1" max="20" step=".5"></slider-input>
+                </td>
+              </tr>
               <tr data-tip="Show or hide circle around good icons">
                 <td colspan="2">
                   <input id="styleGoodsCircle" class="checkbox" type="checkbox" />
                   <label for="styleGoodsCircle" class="checkbox-label">Show circle</label>
+                </td>
+              </tr>
+            </tbody>
+            <tbody id="styleGoodsBurgs" style="display: none">
+              <tr data-tip="Set burg production plate icon size in pixels. Plate and font scale together with it">
+                <td>Plate size</td>
+                <td>
+                  <slider-input id="styleGoodsBurgsSize" min="1" max="12" step=".5"></slider-input>
                 </td>
               </tr>
             </tbody>
@@ -1458,6 +1472,24 @@
                 <td>Fill opacity</td>
                 <td>
                   <slider-input id="styleMarketsLayerFillOpacity" min="0" max="1" step=".01"></slider-input>
+                </td>
+              </tr>
+              <tr data-tip="Set market marker (circle) size in pixels">
+                <td>Marker size</td>
+                <td>
+                  <slider-input id="styleMarketsSize" min="1" max="12" step=".5"></slider-input>
+                </td>
+              </tr>
+              <tr data-tip="Set market marker emoji icon size in pixels">
+                <td>Icon size</td>
+                <td>
+                  <slider-input id="styleMarketsIconSize" min="1" max="20" step=".5"></slider-input>
+                </td>
+              </tr>
+              <tr data-tip="Set the emoji icon shown inside the market marker">
+                <td>Marker icon</td>
+                <td>
+                  <button id="styleMarketsIcon" type="button" style="background: none; padding: 0;">⚖️</button>
                 </td>
               </tr>
             </tbody>
@@ -2161,6 +2193,12 @@
               Burgs
             </button>
             <button id="regenerateCultures" data-tip="Click to regenerate non-locked cultures">Cultures</button>
+            <button
+              id="regenerateEconomy"
+              data-tip="Rebuild market territories, production, trade deals, and taxes from the current goods and markets"
+            >
+              Economy
+            </button>
             <button id="regenerateEmblems" data-tip="Click to regenerate all emblems">Emblems</button>
             <button id="regenerateGoods" data-tip="Click to regenerate bonus goods placement">Goods</button>
             <button id="regenerateIce" data-tip="Click to regenerate icebergs and glaciers">Ice</button>
@@ -2190,12 +2228,6 @@
               data-tip="Click to regenerate production and trade deals"
             >
               Production
-            </button>
-            <button
-              id="regenerateEconomy"
-              data-tip="Rebuild market territories, production, trade deals, and taxes from the current goods and markets"
-            >
-              Economy
             </button>
             <button
               id="regenerateProvinces"
@@ -2364,7 +2396,7 @@
           <p style="text-align: center; margin-top: 1em">
             <button
               id="startTourButton"
-              onclick="UITour.start()"
+              onclick="window.Services.UiTour.start()"
               data-tip="Take an interactive tour of the map generator"
             >
               &#9654; Take an Interactive Tour
@@ -2810,80 +2842,8 @@
           class="icon-trash fastDelete"
         ></button>
       </div>
-      <div id="riverEditor" class="dialog" style="display: none">
-        <div id="riverBody" style="padding-bottom: 0.3em">
-          <div>
-            <div class="label" style="width: 4.8em">Name:</div>
-            <span
-              id="riverNameCulture"
-              data-tip="Generate culture-specific name for the river"
-              class="icon-book pointer"
-            ></span>
-            <span id="riverNameRandom" data-tip="Generate random name for the river" class="icon-globe pointer"></span>
-            <input id="riverName" data-tip="Type to rename the river" autocorrect="off" spellcheck="false" />
-            <span data-tip="Speak the name. You can change voice and language in options" class="speaker">🔊</span>
-          </div>
-          <div data-tip="Type to change river type (e.g. fork, creek, river, brook, stream)">
-            <div class="label">Type:</div>
-            <input id="riverType" autocorrect="off" spellcheck="false" />
-          </div>
-          <div data-tip="Select parent river">
-            <div class="label">Mainstem:</div>
-            <select id="riverMainstem"></select>
-          </div>
-          <div data-tip="River drainage basin (watershed)">
-            <div class="label">Basin:</div>
-            <input id="riverBasin" disabled />
-          </div>
-          <div data-tip="River discharge (flux power)">
-            <div class="label">Discharge:</div>
-            <input id="riverDischarge" disabled />
-          </div>
-          <div data-tip="River length in selected units">
-            <div class="label">Length:</div>
-            <input id="riverLength" disabled />
-          </div>
-          <div data-tip="River mouth width in selected units">
-            <div class="label">Mouth width:</div>
-            <input id="riverWidth" disabled />
-          </div>
-          <div data-tip="River source additional width. Default value is 0">
-            <div class="label">Source width:</div>
-            <input id="riverSourceWidth" type="number" min="0" max="3" step=".01" />
-          </div>
-          <div data-tip="River width multiplier. Default value is 1">
-            <div class="label">Width modifier:</div>
-            <input id="riverWidthFactor" type="number" min="1" max="2" step=".1" />
-          </div>
-        </div>
-        <div id="riverBottom">
-          <button
-            id="riverCreateSelectingCells"
-            data-tip="Create a new river selecting river cells"
-            class="icon-map-pin"
-          ></button>
-          <button id="riverEditStyle" data-tip="Edit style for all rivers in Style Editor" class="icon-brush"></button>
-          <button
-            id="riverElevationProfile"
-            data-tip="Show the elevation profile for the river"
-            class="icon-chart-area"
-          ></button>
-          <button id="riverLegend" data-tip="Edit free text notes (legend) for the river" class="icon-edit"></button>
-          <button
-            id="riverRemove"
-            data-tip="Remove river"
-            data-shortcut="Delete"
-            class="icon-trash fastDelete"
-          ></button>
-        </div>
-      </div>
-      <div id="riverCreator" class="dialog" style="display: none">
-        <div id="riverCreatorBody" class="table"></div>
-        <div id="riverCreatorBottom">
-          <button id="riverCreatorComplete" data-tip="Complete river creation" class="icon-check"></button>
-          <button id="riverCreatorCancel" data-tip="Cancel the creation" class="icon-cancel"></button>
-        </div>
-      </div>
+      <div id="riverEditor" class="dialog" style="display: none"></div>
+      <div id="riverCreator" class="dialog" style="display: none"></div>
       <div id="lakeEditor" class="dialog" style="display: none">
         <div id="lakeBody" style="padding-bottom: 0.3em">
           <div>
@@ -2978,75 +2938,9 @@
           </div>
         </div>
       </div>
-      <div id="routeEditor" class="dialog" style="display: none">
-        <div id="routeBody" style="padding-bottom: 0.3em">
-          <div>
-            <div class="label">Name:</div>
-            <input id="routeName" data-tip="Type to rename the route" autocorrect="off" spellcheck="false" />
-            <span data-tip="Speak the name. You can change voice and language in options" class="speaker">🔊</span>
-            <span id="routeGenerateName" data-tip="Generate route name" class="icon-globe pointer"></span>
-          </div>
-          <div data-tip="Select route group">
-            <div class="label">Group:</div>
-            <select id="routeGroup"></select>
-            <span id="routeGroupEdit" data-tip="Edit route groups" class="icon-pencil pointer"></span>
-            <span id="routeEditStyle" data-tip="Edit style for the route group" class="icon-brush pointer"></span>
-          </div>
-          <div data-tip="Route length in selected units">
-            <div class="label">Length:</div>
-            <input id="routeLength" disabled />
-          </div>
-        </div>
-        <div id="routeBottom">
-          <button
-            id="routeCreateSelectingCells"
-            data-tip="Create a new route selecting route cells"
-            class="icon-map-pin"
-          ></button>
-          <button
-            id="routeJoin"
-            data-tip="Click to join the route to another route that starts or ends at the same cell"
-            class="icon-link"
-          ></button>
-          <button
-            id="routeSplit"
-            data-tip="Click on a control point to split the route there"
-            class="icon-unlink"
-          ></button>
-          <button
-            id="routeElevationProfile"
-            data-tip="Show the elevation profile for the route"
-            class="icon-chart-area"
-          ></button>
-          <button id="routeLegend" data-tip="Edit free text notes (legend) for the route" class="icon-edit"></button>
-          <button id="routeLock" class="icon-lock-open" onmouseover="showElementLockTip(event)"></button>
-          <button
-            id="routeRemove"
-            data-tip="Remove route"
-            data-shortcut="Delete"
-            class="icon-trash fastDelete"
-          ></button>
-        </div>
-      </div>
-      <div id="routeCreator" class="dialog" style="display: none">
-        <div>Click on map to add/remove route points</div>
-        <div id="routeCreatorBody" class="table" style="margin: 0.3em 0"></div>
-        <div id="routeCreatorBottom">
-          <button id="routeCreatorComplete" data-tip="Complete route creation" class="icon-check"></button>
-          <button id="routeCreatorCancel" data-tip="Cancel the creation" class="icon-cancel"></button>
-          <div style="display: inline-block">
-            Group:
-            <select id="routeCreatorGroupSelect"></select>
-            <span id="routeCreatorGroupEdit" data-tip="Edit route groups" class="icon-pencil pointer"></span>
-          </div>
-        </div>
-      </div>
-      <div id="routeGroupsEditor" class="dialog" style="display: none">
-        <div id="routeGroupsEditorBody" class="table" style="padding: 0.3em 0; width: 100%"></div>
-        <div id="routeGroupsEditorBottom">
-          <button id="routeGroupsEditorAdd" data-tip="Add route group" class="icon-plus"></button>
-        </div>
-      </div>
+      <div id="routeEditor" class="dialog" style="display: none"></div>
+      <div id="routeCreator" class="dialog" style="display: none"></div>
+      <div id="routeGroupsEditor" class="dialog" style="display: none"></div>
       <div id="iceEditor" class="dialog" style="display: none">
         <button id="iceEditStyle" data-tip="Edit style in Style Editor" class="icon-brush"></button>
         <button id="iceRandomize" data-tip="Randomize Iceberg shape" class="icon-shuffle"></button>
@@ -3487,7 +3381,7 @@
                 ></span>
                 <span
                   id="burgPlaza"
-                  data-tip="Shows whether the burg is a trade center (has big marketplace). Click to toggle"
+                  data-tip="Shows whether the burg is a trade center (market center). Click to toggle"
                   data-feature="plaza"
                   class="burgFeature icon-store"
                   style="font-size: 1em"
@@ -3525,11 +3419,11 @@
                 <div class="label">Production:</div>
                 <span id="burgProduction" style="display: inline-flex; flex-wrap: wrap; column-gap: 0.3em; max-width: 110px;"></span>
               </div>
-              <div data-tip="Wealth is gross product per population point for the current production run. It is a per-capita productivity measure, not the burg's cumulative treasury.">
+              <div data-tip="Gross product per population point, daily average">
                 <div class="label">Wealth</div>
                 <span id="burgWealth"></span>
               </div>
-              <div data-tip="Treasury is the burg's cumulative cash balance after all production, purchases, and sales.">
+              <div data-tip="Treasury balance after production, purchases, and sales">
                 <div class="label">Treasury</div>
                 <span id="burgTreasury"></span>
               </div>
@@ -5158,7 +5052,7 @@
         </div>
       </div>
       <div id="goodsEditor" class="dialog stable" style="display: none">
-        <div id="goodsHeader" class="header" style="grid-template-columns: 4em 7.4em 7em 6.8em 6em 4.6em 1.6em;">
+        <div id="goodsHeader" class="header" style="grid-template-columns: 4em 7.4em 6em 5em 6.8em 6em 4.6em 1.6em;">
           <input
             type="checkbox"
             data-tip="Show or hide all goods on the Goods map"
@@ -5172,7 +5066,10 @@
           <div data-tip="Click to sort by type" class="sortable alphabetically" data-sortby="type">
             Type&nbsp;
           </div>
-          <div data-tip="Total production units aggregated from cells and burgs. Click to sort" class="sortable icon-sort-number-down hide" data-sortby="produced">
+          <div data-tip="Unit of production. Click to sort" class="sortable alphabetically hide" data-sortby="unit">
+            Unit&nbsp;
+          </div>
+          <div data-tip="Total units produced daily in cells (raw) and burgs (manufactured). Click to sort" class="sortable icon-sort-number-down hide" data-sortby="produced">
             Produced&nbsp;
           </div>
           <div data-tip="Total units in stock across all markets and burg inventories. Click to sort" class="sortable hide" data-sortby="stock">
@@ -5185,7 +5082,7 @@
         <div id="goodsBody" class="table" style="max-height: 50vh;" data-type="absolute"></div>
         <div id="goodsFooter" class="totalLine hide">
           <div data-tip="Number of goods (displayed / total)" style="margin-left: 5px">Goods:&nbsp;<span id="goodsDisplayed">0</span> of <span id="goodsNumber">0</span></div>
-          <div data-tip="Total amount of goods produced by all cells and burgs" style="margin-left: 12px">Produced:&nbsp;<span id="goodsProduced">0</span></div>
+          <div data-tip="Total units produced daily by all cells and burgs" style="margin-left: 12px">Produced:&nbsp;<span id="goodsProduced">0</span></div>
           <div data-tip="Total units in stock across all markets and burg inventories" style="margin-left: 12px">Stock:&nbsp;<span id="goodsStock">0</span></div>
         </div>
         <div id="goodsBottom">
@@ -5602,52 +5499,8 @@
           </table>
         </form>
       </div>
-      <div id="routesOverview" class="dialog stable" style="display: none">
-        <div id="routesHeader" class="header" style="grid-template-columns: 17em 8em 8em">
-          <div data-tip="Click to sort by route name" class="sortable alphabetically" data-sortby="name">
-            Route&nbsp;
-          </div>
-          <div data-tip="Click to sort by route group" class="sortable alphabetically" data-sortby="group">
-            Group&nbsp;
-          </div>
-          <div data-tip="Click to sort by route length" class="sortable icon-sort-number-down" data-sortby="length">
-            Length&nbsp;
-          </div>
-        </div>
-
-        <div id="routesGroupToggles" style="display:flex; flex-wrap:wrap; gap:0.3em; padding:0.3em 0.2em; border-bottom:1px solid #ccc;"></div>
-        <div id="routesBody" class="table"></div>
-        <div id="routesFooter" class="totalLine">
-          <div data-tip="Routes number" style="margin-left: 4px">
-            Routes:&nbsp;<span id="routesFooterNumber">0</span>
-          </div>
-          <div data-tip="Average length" style="margin-left: 12px">
-            Average length:&nbsp;<span id="routesFooterLength">0</span>
-          </div>
-        </div>
-        <div id="routesBottom">
-          <button id="routesOverviewRefresh" data-tip="Refresh the Editor" class="icon-cw"></button>
-          <button
-            id="routesCreateNew"
-            data-tip="Create a new route selecting route cells"
-            class="icon-map-pin"
-          ></button>
-          <button
-            id="routesExport"
-            data-tip="Save routes-related data as a text file (.csv)"
-            class="icon-download"
-          ></button>
-          <button id="routesLockAll" data-tip="Lock or unlock all routes" class="icon-lock"></button>
-          <button
-            id="routesRemoveAll"
-            data-tip="Remove all unlocked routes (locked routes are kept)"
-            class="icon-trash"
-          ></button>
-          <label for="routesSearch" data-tip="Filter by name or group" style="margin-left: 0.2em"
-            >Search: <input id="routesSearch" type="search"
-          /></label>
-        </div>
-      </div>
+      <div id="routesOverview" class="dialog stable" style="display: none"></div>
+      <div id="riversOverview" class="dialog stable" style="display: none"></div>
 
       <div id="travelCalculator" class="dialog" style="display: none">
         <div style="display:flex; gap:1em; padding:0.4em 0">
@@ -5690,63 +5543,6 @@
         </div>
       </div>
 
-
-      <div id="riversOverview" class="dialog stable" style="display: none">
-        <div id="riversHeader" class="header" style="grid-template-columns: 9em 4em 7em 5em 5em 9em">
-          <div data-tip="Click to sort by river name" class="sortable alphabetically" data-sortby="name">
-            River&nbsp;
-          </div>
-          <div data-tip="Click to sort by river type name" class="sortable alphabetically" data-sortby="type">
-            Type&nbsp;
-          </div>
-          <div
-            data-tip="Click to sort by discharge (flux in m3/s)"
-            class="sortable icon-sort-number-down"
-            data-sortby="discharge"
-          >
-            Discharge&nbsp;
-          </div>
-          <div data-tip="Click to sort by river length" class="sortable" data-sortby="length">Length&nbsp;</div>
-          <div data-tip="Click to sort by river mouth width" class="sortable" data-sortby="width">Width&nbsp;</div>
-          <div data-tip="Click to sort by river basin" class="sortable alphabetically" data-sortby="basin">
-            Basin&nbsp;
-          </div>
-        </div>
-        <div id="riversBody" class="table"></div>
-        <div id="riversFooter" class="totalLine">
-          <div data-tip="Rivers number" style="margin-left: 4px">
-            Rivers:&nbsp;<span id="riversFooterNumber">0</span>
-          </div>
-          <div data-tip="Average discharge" style="margin-left: 12px">
-            Average discharge:&nbsp;<span id="riversFooterDischarge">0</span>
-          </div>
-          <div data-tip="Average length" style="margin-left: 12px">
-            Length:&nbsp;<span id="riversFooterLength">0</span>
-          </div>
-          <div data-tip="Average mouth width" style="margin-left: 12px">
-            Width:&nbsp;<span id="riversFooterWidth">0</span>
-          </div>
-        </div>
-        <div id="riversBottom">
-          <button id="riversOverviewRefresh" data-tip="Refresh the Editor" class="icon-cw"></button>
-          <button
-            id="addNewRiver"
-            data-tip="Automatically add river starting from clicked cell. Hold Shift to add multiple"
-            class="icon-plus"
-          ></button>
-          <button id="riverCreateNew" data-tip="Create a new river selecting river cells" class="icon-map-pin"></button>
-          <button id="riversBasinHighlight" data-tip="Toggle basin highlight mode" class="icon-sitemap"></button>
-          <button
-            id="riversExport"
-            data-tip="Save rivers-related data as a text file (.csv)"
-            class="icon-download"
-          ></button>
-          <button id="riversRemoveAll" data-tip="Remove all rivers" class="icon-trash"></button>
-          <label for="riversSearch" data-tip="Filter by name, type or basin" style="margin-left: 0.2em"
-            >Search: <input id="riversSearch" type="search"
-          /></label>
-        </div>
-      </div>
       <div id="militaryOverview" class="dialog stable" style="display: none">
         <div id="militaryHeader" class="header">
           <div data-tip="State name. Click to sort" class="sortable alphabetically" data-sortby="state">
@@ -6324,16 +6120,16 @@
         <div style="margin-bottom: 0.3em; font-weight: bold">Download image</div>
         <div>
           <button
-            onclick="exportToSvg()"
+            onclick="window.Services.ExportMap.exportToSvg()"
             data-tip="Download the map as vector image (open directly in browser or Inkscape)"
           >
             .svg
           </button>
-          <button onclick="exportToPng()" data-tip="Download visible part of the map as .png (lossless compressed)">
+          <button onclick="window.Services.ExportMap.exportToPng()" data-tip="Download visible part of the map as .png (lossless compressed)">
             .png
           </button>
           <button
-            onclick="exportToJpeg()"
+            onclick="window.Services.ExportMap.exportToJpeg()"
             data-tip="Download visible part of the map as .jpeg (lossy compressed) image"
           >
             .jpeg
@@ -6377,11 +6173,11 @@
         <p>Generator uses pop-up window to download files. Please ensure your browser does not block popups.</p>
         <div style="margin: 1em 0 0.3em; font-weight: bold">Export to GeoJSON</div>
         <div>
-          <button onclick="saveGeoJsonCells()" data-tip="Download cells data in GeoJSON format">cells</button>
-          <button onclick="saveGeoJsonRoutes()" data-tip="Download routes data in GeoJSON format">routes</button>
-          <button onclick="saveGeoJsonRivers()" data-tip="Download rivers data in GeoJSON format">rivers</button>
-          <button onclick="saveGeoJsonMarkers()" data-tip="Download markers data in GeoJSON format">markers</button>
-          <button onclick="saveGeoJsonZones()" data-tip="Download zones data in GeoJSON format">zones</button>
+          <button onclick="window.Services.ExportMap.saveGeoJsonCells()" data-tip="Download cells data in GeoJSON format">cells</button>
+          <button onclick="window.Services.ExportMap.saveGeoJsonRoutes()" data-tip="Download routes data in GeoJSON format">routes</button>
+          <button onclick="window.Services.ExportMap.saveGeoJsonRivers()" data-tip="Download rivers data in GeoJSON format">rivers</button>
+          <button onclick="window.Services.ExportMap.saveGeoJsonMarkers()" data-tip="Download markers data in GeoJSON format">markers</button>
+          <button onclick="window.Services.ExportMap.saveGeoJsonZones()" data-tip="Download zones data in GeoJSON format">zones</button>
         </div>
         <p>
           GeoJSON format is used in GIS tools such as QGIS. Check out
@@ -6405,17 +6201,17 @@
         <div style="margin-top: 0.3em">
           <strong>Save map to</strong>
           <button
-            onclick="saveMap('machine')"
+            onclick="window.Services.Save.saveMap('machine')"
             data-tip="Download map file to your local disk"
             data-shortcut="Ctrl + S"
             style="font-weight: 600"
           >
             machine
           </button>
-          <button onclick="saveMap('dropbox')" data-tip="Save map file to your Dropbox" data-shortcut="Ctrl + C">
+          <button onclick="window.Services.Save.saveMap('dropbox')" data-tip="Save map file to your Dropbox" data-shortcut="Ctrl + C">
             dropbox
           </button>
-          <button onclick="saveMap('storage')" data-tip="Save the project to browser storage only" data-shortcut="F6">
+          <button onclick="window.Services.Save.saveMap('storage')" data-tip="Save the project to browser storage only" data-shortcut="F6">
             browser
           </button>
         </div>
@@ -6436,7 +6232,7 @@
           >
             URL
           </button>
-          <button onclick="quickLoad()" data-tip="Load map from browser storage (if saved before)">storage</button>
+          <button onclick="window.Services.Load.quickLoad()" data-tip="Load map from browser storage (if saved before)">storage</button>
         </div>
         <p>Click on <i>storage</i> to open the last saved map.</p>
         <div id="loadFromDropbox">
@@ -6452,9 +6248,9 @@
           </p>
           <select id="loadFromDropboxSelect" style="width: 22em"></select>
           <div id="loadFromDropboxButtons" style="margin-bottom: 0.6em">
-            <button onclick="loadFromDropbox()" data-tip="Load map file (.map or .gz) from your Dropbox">Load</button>
+            <button onclick="window.Services.Load.loadFromDropbox()" data-tip="Load map file (.map or .gz) from your Dropbox">Load</button>
             <button
-              onclick="createSharableDropboxLink()"
+              onclick="window.Services.Load.createSharableDropboxLink()"
               data-tip="Select file and create a link to share with your friends"
             >
               Share
@@ -8866,7 +8662,9 @@
             <metadata description="Wood by Callum Taylor from the Noun Project, redrawn by Azgaar" source="https://thenounproject.com/search/?q=Wood&i=53364" license="https://creativecommons.org/licenses/by/3.0"/>
             <g fill="#fff" stroke="#000" stroke-width="3"><path d="M23 33L49.5 5.6S58-3 68.2 4.705c5.8 5.3 6.8 11.3-3.18 21.3-.714.929-17 19-18 20m-4 5l22-25s9.01-9.02 19-1.02c10 8 1.02 19 1.02 19l-29 35m-51-17l14-16 41 20m-6-38l17-19m-12 54l15-17"/><circle cx="33" cy="43" r="14"/><path d="M33 50c-3 0-7-2-7-7"/><circle cx="17" cy="69" r="14"/><circle cx="46" cy="69" r="14"/><path d="M17 76c-3 0-7-2-7-7m36 7c-3 0-7-2-7-7"/></g>
           </symbol>
-        <g id="rose-coord-line" stroke="#3f3f3f">
+        </g>
+        <g id="defs-compass-rose" stroke-width="1.1">
+          <g id="rose-coord-line" stroke="#3f3f3f">
             <line id="sL1" x1="0" y1="-20000" x2="0" y2="20000" />
             <line id="sL2" x1="-20000" y1="0" x2="20000" y2="0" />
           </g>
@@ -9122,71 +8920,54 @@
     <script src="libs/flatqueue.js"></script>
     <script src="libs/delaunator.min.js"></script>
     <script src="libs/indexedDB.js?v=1.99.00"></script>
+    <script type="module" src="data/supporters.ts"></script>
+    <script type="module" src="data/view-3d-options.ts"></script>
     <script type="module" src="utils/index.ts"></script>
     <script type="module" src="generators/index.ts"></script>
     <script type="module" src="renderers/index.ts"></script>
     <script type="module" src="controllers/index.ts"></script>
     <script type="module" src="services/index.ts"></script>
-    <script type="module" src="lazy-loaders.ts"></script>
     <script defer src="config/heightmap-templates.js"></script>
     <script defer src="config/precreated-heightmaps.js"></script>
     <script defer src="libs/alea.min.js?v1.105.0"></script>
     <script defer src="libs/polylabel.min.js?v1.105.0"></script>
     <script defer src="libs/simplify.js?v1.105.6"></script>
-    <script defer src="modules/ui/layers.js?v=1.125.0"></script>
+    <script defer src="modules/ui/layers.js?v=1.131.0"></script>
     <script defer src="modules/ui/seasons.js?v=1.122.0"></script>
     <script defer src="modules/resources.js?v=1.0.0"></script>
     <script defer src="modules/ui/measurers.js?v=1.99.00"></script>
-    <script defer src="modules/ui/style-presets.js?v=1.125.0"></script>
-    <script defer src="modules/ui/general.js?v=1.125.0"></script>
-    <script defer src="modules/ui/options.js?v=1.126.0"></script>
-    <script defer src="main.js?v=1.126.0"></script>
-    <script defer src="modules/ui/style.js?v=1.125.0"></script>
-    <script defer src="modules/ui/editors.js?v=1.126.0"></script>
-    <script defer src="modules/ui/tools.js?v=1.126.0"></script>
-    <script defer src="modules/ui/world-configurator.js?v=1.120.5"></script>
-    <script defer src="modules/ui/heightmap-editor.js?v=1.125.1"></script>
-    <script defer src="modules/ui/provinces-editor.js?v=1.122.11"></script>
+    <script defer src="modules/ui/style-presets.js?v=1.127.0"></script>
+    <script defer src="modules/ui/general.js?v=1.129.0"></script>
+    <script defer src="modules/ui/options.js?v=1.131.0"></script>
+    <script defer src="main.js?v=1.135.0"></script>
+    <script defer src="modules/ui/style.js?v=1.127.0"></script>
+    <script defer src="modules/ui/editors.js?v=1.134.1"></script>
+    <script defer src="modules/ui/tools.js?v=1.134.2"></script>
+    <script defer src="modules/ui/world-configurator.js?v=1.131.0"></script>
+    <script defer src="modules/ui/heightmap-editor.js?v=1.131.0"></script>
+    <script defer src="modules/ui/provinces-editor.js?v=1.131.0"></script>
     <script defer src="modules/ui/biomes-editor.js?v=1.112.0"></script>
     <script defer src="modules/ui/temperature-graph.js?v=1.106.6"></script>
-    <script defer src="modules/ui/routes-editor.js?v=1.122.11"></script>
-    <script defer src="modules/ui/routes-creator.js?v=1.120.5"></script>
-    <script defer src="modules/ui/route-group-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/ice-editor.js?v=1.111.0"></script>
     <script defer src="modules/ui/lakes-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/coastline-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/labels-editor.js?v=1.120.5"></script>
-    <script defer src="modules/ui/rivers-editor.js?v=1.120.5"></script>
-    <script defer src="modules/ui/rivers-creator.js?v=1.106.0"></script>
     <script defer src="modules/ui/relief-editor.js?v=1.99.00"></script>
-    <script defer src="modules/ui/burg-group-editor.js?v=1.122.11"></script>
-    <script defer src="modules/ui/burg-editor.js?v=1.125.0"></script>
     <script defer src="modules/ui/units-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/timeline.js?v=1.0.0"></script>
     <script defer src="modules/ui/notes-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/ai-generator.js?v=1.120.5"></script>
     <script defer src="modules/ui/diplomacy-editor.js?v=1.120.5"></script>
     <script defer src="modules/ui/zones-editor.js?v=1.120.5"></script>
-    <script defer src="modules/ui/burgs-overview.js?v=1.125.0"></script>
-    <script defer src="modules/ui/routes-overview.js?v=1.120.5"></script>
-    <script defer src="modules/ui/rivers-overview.js?v=1.120.5"></script>
-    <script defer src="modules/ui/military-overview.js?v=1.108.5"></script>
-    <script defer src="modules/ui/regiments-overview.js?v=1.108.5"></script>
     <script defer src="modules/ui/markers-overview.js?v=1.125.0"></script>
-    <script defer src="modules/ui/regiment-editor.js?v=1.120.5"></script>
-    <script defer src="modules/ui/battle-screen.js?v=1.120.5"></script>
     <script defer src="modules/ui/travel-calculator.js"></script>
     <script defer src="modules/ui/emblems-editor.js?v=1.122.11"></script>
     <script defer src="modules/ui/markers-editor.js?v=1.122.11"></script>
     <script defer src="modules/ui/3d.js?v=1.99.00"></script>
     <script defer src="modules/ui/submap-tool.js?v=1.120.5"></script>
-    <script defer src="modules/ui/transform-tool.js?v=1.120.5"></script>
-    <script defer src="modules/ui/hotkeys.js?v=2.0.0"></script>
+    <script defer src="modules/ui/transform-tool.js?v=1.131.0"></script>
+    <script defer src="modules/ui/hotkeys.js?v=1.134.1"></script>
     <script defer src="libs/rgbquant.min.js"></script>
     <script defer src="libs/jquery.ui.touch-punch.min.js"></script>
-    <script defer src="modules/io/save.js?v=1.125.0"></script>
-    <script defer src="modules/io/load.js?v=1.125.0"></script>
-    <script defer src="modules/io/cloud.js?v=1.114.0"></script>
-    <script defer src="modules/io/export.js?v=1.125.0"></script>
   </body>
 </html>

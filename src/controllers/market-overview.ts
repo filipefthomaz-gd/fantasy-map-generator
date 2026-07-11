@@ -1,3 +1,4 @@
+import { Controllers } from "@/controllers";
 import type { Burg } from "../generators/burgs-generator";
 import type { Market } from "../generators/markets-generator";
 import { ensureEl, formatPrice, rn } from "../utils";
@@ -5,7 +6,7 @@ import { ensureEl, formatPrice, rn } from "../utils";
 let isInitialized = false;
 let activeMarketId = 0;
 
-export function open(marketId: number): void {
+function open(marketId: number): void {
   if (customization) return;
 
   const market = Markets.get(marketId);
@@ -36,7 +37,7 @@ export function open(marketId: number): void {
   if (!isInitialized) {
     ensureEl("marketOverviewRefresh").on("click", marketOverviewAddLines);
     ensureEl("marketOverviewExport").on("click", downloadStockCsv);
-    ensureEl("marketOverviewOpenDeals").on("click", () => window.MarketDealsOverview.open(activeMarketId));
+    ensureEl("marketOverviewOpenDeals").on("click", () => Controllers.MarketDealsOverview.open(activeMarketId));
     ensureEl("marketOverviewName").on("input", onRenameInput);
     ensureEl("marketOverviewNameReset").on("click", resetMarketName);
     isInitialized = true;
@@ -139,11 +140,4 @@ function closeMarketOverview() {
   ensureEl("marketOverviewSummary").innerHTML = "";
 }
 
-declare global {
-  interface Window {
-    MarketOverview: { open: typeof open };
-    MarketDealsOverview: { open: (marketId: number) => void };
-  }
-}
-
-window.MarketOverview = { open };
+export const MarketOverview = { open };

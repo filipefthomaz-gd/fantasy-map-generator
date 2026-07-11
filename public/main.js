@@ -24,8 +24,7 @@ if (PRODUCTION && "serviceWorker" in navigator) {
     "beforeinstallprompt",
     async event => {
       event.preventDefault();
-      const Installation = await window.lazy.installation();
-      Installation.init(event);
+      window.Services.Installation.init(event);
     },
     { once: true }
   );
@@ -180,7 +179,8 @@ let options = {
   },
   trade: {
     animation: JSON.safeParse(localStorage.getItem("trade-animation")) || TradeAnimation.getDefaultOptions()
-  }
+  },
+  threeD: { ...window.ThreeDOptions }
 };
 
 // global style object; in v2.0 to be used for all map styles and render settings
@@ -350,10 +350,10 @@ async function checkLoadParameters() {
     const valid = pattern.test(maplink);
     if (valid) {
       setTimeout(() => {
-        loadMapFromURL(maplink, 1);
+        window.Services.Load.loadMapFromURL(maplink, 1);
       }, 1000);
       return;
-    } else showUploadErrorMessage("Map link is not a valid URL", maplink);
+    } else window.Services.Load.showUploadErrorMessage("Map link is not a valid URL", maplink);
   }
 
   // if there is a seed (user of MFCG provided), generate map for it
@@ -369,7 +369,7 @@ async function checkLoadParameters() {
       const blob = await ldb.get("lastMap");
       if (blob) {
         WARN && console.warn("Loading last stored map");
-        uploadMap(blob);
+        window.Services.Load.uploadMap(blob);
         return;
       }
     } catch (error) {
@@ -467,17 +467,19 @@ function toggleAssistant() {
 function initTourPromptButton() {
   const MAX_SHOWS = 3;
   const STORAGE_KEY = "fmg-tour-prompt-count";
-  const btn = document.getElementById("tourPromptButton");
-  if (!btn) return;
 
   const count = parseInt(localStorage.getItem(STORAGE_KEY) || "0", 10);
   if (count >= MAX_SHOWS) return;
 
-  localStorage.setItem(STORAGE_KEY, count + 1);
+  const btn = document.getElementById("tourPromptButton");
+  if (!btn) return;
+
   btn.style.display = "flex";
-  btn.addEventListener("click", () => {
-    UITour.start();
+  btn.addEventListener("click", async () => {
+    window.Services.UiTour.start();
+    localStorage.setItem(STORAGE_KEY, MAX_SHOWS);
   });
+  localStorage.setItem(STORAGE_KEY, count + 1);
 }
 
 // find burg for MFCG and focus on it
@@ -686,7 +688,7 @@ void (function addDragToUpload() {
     overlay.style.display = null;
     overlay.innerHTML = "Uploading<span>.</span><span>.</span><span>.</span>";
     if (closeDialogs) closeDialogs();
-    uploadMap(file, () => {
+    window.Services.Load.uploadMap(file, () => {
       overlay.style.display = "none";
       overlay.innerHTML = "Drop a map file to open";
     });
@@ -942,7 +944,7 @@ function defineMapSize() {
     if (template === "europe-accented") return [14, 22, 44.8];
     if (template === "europe-and-central-asia") return [25, 10, 39.5];
     if (template === "europe-central") return [11, 22, 46.4];
-    if (template === "north-sea-region") return [7, 18, 48.9];
+    if (template === "europe-north") return [7, 18, 48.9];
     if (template === "greenland") return [22, 7, 55.8];
     if (template === "hellenica") return [8, 27, 43.5];
     if (template === "iceland") return [2, 15, 55.3];
@@ -1417,7 +1419,7 @@ function showStatistics() {
   window.dispatchEvent(new CustomEvent("map:generated", { detail: { seed, mapId } }));
 }
 
-const regenerateMap = debounce(async function (options) {
+const regenerateMap = debounce(async function (config) {
   WARN && console.warn("Generate new random map");
 
   const cellsDesired = +ensureEl("pointsInput").dataset.cells;
@@ -1428,9 +1430,9 @@ const regenerateMap = debounce(async function (options) {
   customization = 0;
   resetZoom(1000);
   undraw();
-  await generate(options);
+  await generate(config);
   drawLayers();
-  if (ThreeD.options.isOn) ThreeD.redraw();
+  if (options.threeD.isOn) window.Controllers.View3d.redraw();
   if ($("#worldConfigurator").is(":visible")) editWorld();
 
   fitMapToScreen();

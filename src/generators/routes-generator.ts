@@ -176,12 +176,13 @@ const suffixes: Record<string, Record<string, number>> = {
 
 export interface Route {
   i: number;
-  group: "roads" | "trails" | "searoutes" | "railways" | "airways";
+  group: string;
   feature: number;
   points: number[][];
   cells?: number[];
   merged?: boolean;
   name?: string;
+  length?: number;
   lock?: boolean;
   airport?: number;
 }
@@ -1325,8 +1326,8 @@ class RoutesModule {
       return null;
     }
 
-    const model = rw(models[group] || models["roads"]);
-    const suffix = rw(suffixes[group] || suffixes["roads"]);
+    const model = rw(models[group] || models.roads);
+    const suffix = rw(suffixes[group] || suffixes.roads);
 
     const burgName = getBurgName();
     if (model === "burg_suffix" && burgName) return `${burgName} ${suffix}`;

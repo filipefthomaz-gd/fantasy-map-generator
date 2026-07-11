@@ -10,29 +10,29 @@ toolsContent.addEventListener("click", function (event) {
   // click on open Editor buttons
   if (button === "editHeightmapButton") editHeightmap();
   else if (button === "editBiomesButton") editBiomes();
-  else if (button === "editStatesButton") editStates();
+  else if (button === "editStatesButton") window.Controllers.StatesEditor.open();
   else if (button === "editProvincesButton") editProvinces();
   else if (button === "editDiplomacyButton") editDiplomacy();
-  else if (button === "editCoastlineSettings") editCoastlineSettings();
-  else if (button === "editTradeAnimationButton") editTradeAnimation();
-  else if (button === "editCulturesButton") editCultures();
+  else if (button === "editCoastlineSettings") window.Controllers.CoastlineEditor.open();
+  else if (button === "editTradeAnimationButton") window.Controllers.TradeAnimationEditor.open();
+  else if (button === "editCulturesButton") window.Controllers.CulturesEditor.open();
   else if (button === "editContinentsButton") editContinents();
-  else if (button === "editReligions") editReligions();
-  else if (button === "editGoods") GoodsEditor.open();
+  else if (button === "editReligions") window.Controllers.ReligionsEditor.open();
+  else if (button === "editGoods") window.Controllers.GoodsEditor.open();
   else if (button === "editEmblemButton") openEmblemEditor();
-  else if (button === "editNamesBaseButton") NamesbaseEditor.open();
+  else if (button === "editNamesBaseButton") window.Controllers.NamesbaseEditor.open();
   else if (button === "openTimelineButton") openTimeline();
   else if (button === "editUnitsButton") editUnits();
   else if (button === "editNotesButton") editNotes();
   else if (button === "editZonesButton") editZones();
-  else if (button === "overviewChartsButton") ChartsOverview.open();
-  else if (button === "overviewBurgsButton") overviewBurgs();
-  else if (button === "overviewRoutesButton") overviewRoutes();
+  else if (button === "overviewChartsButton") window.Controllers.ChartsOverview.open();
+  else if (button === "overviewBurgsButton") window.Controllers.BurgsOverview.open();
+  else if (button === "overviewRoutesButton") window.Controllers.RoutesOverview.open();
   else if (button === "travelCalculatorButton") openTravelCalculator();
-  else if (button === "overviewRiversButton") overviewRivers();
-  else if (button === "overviewMilitaryButton") overviewMilitary();
+  else if (button === "overviewRiversButton") window.Controllers.RiversOverview.open();
+  else if (button === "overviewMilitaryButton") window.Controllers.MilitaryOverview.open();
   else if (button === "overviewMarkersButton") overviewMarkers();
-  else if (button === "overviewMarketsButton") MarketsOverview.open();
+  else if (button === "overviewMarketsButton") window.Controllers.MarketsOverview.open();
   else if (button === "overviewCellsButton") viewCellDetails();
   else if (button === "openMinimapButton") openMinimap();
 
@@ -75,7 +75,7 @@ toolsContent.addEventListener("click", function (event) {
   if (button === "addLabel") toggleAddLabel();
   else if (button === "addBurgTool") toggleAddBurg();
   else if (button === "addRiver") toggleAddRiver();
-  else if (button === "addRoute") createRoute();
+  else if (button === "addRoute") window.Controllers.RouteCreator.open();
   else if (button === "addMarker") toggleAddMarker();
   // click to create a new map buttons
   else if (button === "openSubmapTool") openSubmapTool();
@@ -506,7 +506,7 @@ function regenerateBurgs() {
 
 function regenerateGoods() {
   Goods.generate({ randomSeed: Math.random() });
-  if (layerIsOn("toggleGoods")) drawGoods(GoodsEditor.getDisplayedGoods());
+  if (layerIsOn("toggleGoods")) drawGoods();
   refreshAllEditors();
 }
 
@@ -528,7 +528,7 @@ function regenerateEconomy() {
   States.collectTaxes();
 
   if (layerIsOn("toggleMarketsLayer")) drawMarketsLayer();
-  if (layerIsOn("toggleGoods")) drawGoods(GoodsEditor.getDisplayedGoods());
+  if (layerIsOn("toggleGoods")) drawGoods();
   if (layerIsOn("toggleTrade")) TradeAnimation.restart();
   refreshAllEditors();
 }
@@ -538,7 +538,7 @@ function regenerateProduction() {
   for (const m of pack.markets || []) m.goods = {}; // empty Markets stock
   Production.produce();
   States.collectTaxes();
-  if (layerIsOn("toggleGoods")) drawGoods(GoodsEditor.getDisplayedGoods());
+  if (layerIsOn("toggleGoods")) drawGoods();
   if (layerIsOn("toggleTrade")) TradeAnimation.restart();
   refreshAllEditors();
 }
@@ -741,7 +741,7 @@ function addLabelOnClick() {
 function toggleAddBurg() {
   unpressClickToAddButton();
   ensureEl("addBurgTool").classList.add("pressed");
-  overviewBurgs();
+  window.Controllers.BurgsOverview.open();
   ensureEl("addNewBurg").click();
 }
 
@@ -749,13 +749,14 @@ function toggleAddRiver() {
   const pressed = ensureEl("addRiver").classList.contains("pressed");
   if (pressed) {
     unpressClickToAddButton();
-    ensureEl("addNewRiver").classList.remove("pressed");
+    findEl("addNewRiver")?.classList.remove("pressed");
     return;
   }
 
   addFeature.querySelectorAll("button.pressed").forEach(b => b.classList.remove("pressed"));
   addRiver.classList.add("pressed");
-  ensureEl("addNewRiver").classList.add("pressed");
+  if (!document.getElementById("addNewRiver")) window.Controllers.RiversOverview.open();
+  findEl("addNewRiver")?.classList.add("pressed");
   closeDialogs(".stable");
   viewbox.style("cursor", "crosshair").on("click", addRiverOnClick);
   tip("Click on map to place new river or extend an existing one. Hold Shift to place multiple rivers", true, "warn");
@@ -903,13 +904,13 @@ function addRiverOnClick() {
   if (d3.event.shiftKey === false) {
     Lakes.cleanupLakeData();
     unpressClickToAddButton();
-    ensureEl("addNewRiver").classList.remove("pressed");
-    if (addNewRiver.offsetParent) riversOverviewRefresh.click();
+    findEl("addNewRiver")?.classList.remove("pressed");
+    if (findEl("addNewRiver")?.offsetParent) riversOverviewRefresh.click();
   }
 }
 
 function toggleAddMarker() {
-  const pressed = ensureEl("addMarker").classList.contains("pressed");
+  const pressed = findEl("addMarker")?.classList.contains("pressed");
   if (pressed) {
     unpressClickToAddButton();
     return;
@@ -1064,6 +1065,5 @@ function viewCellDetails() {
 }
 
 async function openMinimap() {
-  const Minimap = await window.lazy.minimap();
-  Minimap.openMinimapDialog();
+  window.Controllers.Minimap.open();
 }

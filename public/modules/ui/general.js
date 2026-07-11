@@ -20,6 +20,7 @@ const onDataTipMove = debounce(showDataTip, 50);
 document.getElementById("dialogs").addEventListener("mousemove", onDataTipMove);
 document.getElementById("optionsContainer").addEventListener("mousemove", onDataTipMove);
 document.getElementById("exitCustomization").addEventListener("mousemove", onDataTipMove);
+document.getElementById("tourPromptButton").addEventListener("mousemove", onDataTipMove);
 
 const tipBackgroundMap = {
   info: "linear-gradient(0.1turn, #ffffff00, #5e5c5c80, #ffffff00)",
@@ -76,6 +77,7 @@ function showElementLockTip(event) {
 
 const onMouseMove = debounce(handleMouseMove, 100);
 function handleMouseMove() {
+  if (!this) return;
   const point = d3.mouse(this);
   const i = findCell(point[0], point[1]); // pack cell id
   if (i === undefined) return;
@@ -191,11 +193,10 @@ function showMapTooltip(point, e, i, g) {
   if (group === "goods") {
     const el = e.target;
     const bonusGoodId = pack.cells.good[i];
-    const displayedGoods = GoodsEditor.getDisplayedGoods();
     const name = id => (Goods.get(+id)?.name || "unknown").toLowerCase();
     const formatProduct = produced =>
       Object.entries(produced).reduce((acc, [goodId, amount]) => {
-        if (displayedGoods.has(+goodId))
+        if (Goods.get(+goodId)?.visible)
           acc.push(`${name(goodId)} ${amount}${+goodId === bonusGoodId ? " (bonus)" : ""}`);
         return acc;
       }, []);
