@@ -37,7 +37,6 @@ export interface Burg {
   product?: number; // gross product from the last production run
   treasury?: number; // accumulated cash balance
   market?: number;
-
 }
 
 // A burg that could become a port on a given water body.

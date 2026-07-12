@@ -1,14 +1,6 @@
 import { curveNatural, line, max, select } from "d3";
 import type { TypedArray } from "../types/PackedGraph";
-import {
-  drawPath,
-  drawPoint,
-  findClosestCell,
-  minmax,
-  rn,
-  round,
-  splitInTwo,
-} from "../utils";
+import { drawPath, drawPoint, findClosestCell, minmax, rn, round, splitInTwo } from "../utils";
 
 declare global {
   var drawStateLabels: (list?: number[]) => void;
@@ -49,8 +41,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
   const LENGTH_STEP = 5;
   const LENGTH_MAX = 300;
   // scale max raycast length by state size to skip wasted iterations on small states
-  const getStateLengthMax = (cells: number) =>
-    Math.max(50, Math.min(LENGTH_MAX, Math.ceil(Math.sqrt(cells) * 20)));
+  const getStateLengthMax = (cells: number) => Math.max(50, Math.min(LENGTH_MAX, Math.ceil(Math.sqrt(cells) * 20)));
 
   const labelPaths = getLabelPaths();
   const letterLength = checkExampleLetterLength();
@@ -86,17 +77,13 @@ const stateLabelsRenderer = (list?: number[]): void => {
           maxLakeSize,
           offset,
           lengthMax,
-          lakeCache,
+          lakeCache
         });
         return { angle, length, x, y };
       });
       const [ray1, ray2] = findBestRayPair(rays);
 
-      const pathPoints: PathPoints = [
-        [ray1.x, ray1.y],
-        state.pole!,
-        [ray2.x, ray2.y],
-      ];
+      const pathPoints: PathPoints = [[ray1.x, ray1.y], state.pole!, [ray2.x, ray2.y]];
       if (ray1.x > ray2.x) pathPoints.reverse();
 
       if (DEBUG.stateLabels) {
@@ -113,13 +100,8 @@ const stateLabelsRenderer = (list?: number[]): void => {
 
   function checkExampleLetterLength(): number {
     const textGroup = select<SVGGElement, unknown>("g#labels > g#states");
-    const testLabel = textGroup
-      .append("text")
-      .attr("x", 0)
-      .attr("y", 0)
-      .text("Example");
-    const letterLength =
-      (testLabel.node() as SVGTextElement).getComputedTextLength() / 7; // approximate length of 1 letter
+    const testLabel = textGroup.append("text").attr("x", 0).attr("y", 0).text("Example");
+    const letterLength = (testLabel.node() as SVGTextElement).getComputedTextLength() / 7; // approximate length of 1 letter
     testLabel.remove();
 
     return letterLength;
@@ -130,9 +112,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
     const lineGen = line<[number, number]>().curve(curveNatural);
 
     const textGroup = select<SVGGElement, unknown>("g#labels > g#states");
-    const pathGroup = select<SVGGElement, unknown>(
-      "defs > g#deftemp > g#textPaths",
-    );
+    const pathGroup = select<SVGGElement, unknown>("defs > g#deftemp > g#textPaths");
 
     // Phase 1: remove stale elements and create all SVG path elements (DOM writes only)
     type PathEntry = { stateId: number; pathPoints: PathPoints; pathEl: SVGPathElement };
@@ -140,10 +120,8 @@ const stateLabelsRenderer = (list?: number[]): void => {
 
     for (const [stateId, pathPoints] of labelPaths) {
       const state = states[stateId];
-      if (!state.i || state.removed)
-        throw new Error("State must not be neutral or removed");
-      if (pathPoints.length < 2)
-        throw new Error("Label path must have at least 2 points");
+      if (!state.i || state.removed) throw new Error("State must not be neutral or removed");
+      if (pathPoints.length < 2) throw new Error("Label path must have at least 2 points");
 
       textGroup.select(`#stateLabel${stateId}`).remove();
       pathGroup.select(`#textPath_stateLabel${stateId}`).remove();
@@ -167,11 +145,17 @@ const stateLabelsRenderer = (list?: number[]): void => {
     });
 
     // Phase 3: prolongate paths if needed and create all text elements (DOM writes only)
-    type LabelEntry = { stateId: number; pathPoints: PathPoints; pathLength: number; textEl: SVGTextPathElement; needsFitCheck: boolean };
+    type LabelEntry = {
+      stateId: number;
+      pathPoints: PathPoints;
+      pathLength: number;
+      textEl: SVGTextPathElement;
+      needsFitCheck: boolean;
+    };
     const labelEntries: LabelEntry[] = [];
 
     for (const { stateId, pathPoints, pathEl, pathLength, lines, ratio } of textEntries) {
-      const longestLineLength = max(lines.map((l) => l.length)) || 0;
+      const longestLineLength = max(lines.map(l => l.length)) || 0;
       if (pathLength && pathLength < longestLineLength) {
         const [x1, y1] = pathPoints.at(0)!;
         const [x2, y2] = pathPoints.at(-1)!;
@@ -193,12 +177,16 @@ const stateLabelsRenderer = (list?: number[]): void => {
         .node() as SVGTextPathElement;
 
       const top = (lines.length - 1) / -2;
-      const spans = lines.map(
-        (lineText, index) => `<tspan x="0" dy="${index ? 1 : top}em">${lineText}</tspan>`,
-      );
+      const spans = lines.map((lineText, index) => `<tspan x="0" dy="${index ? 1 : top}em">${lineText}</tspan>`);
       textEl.insertAdjacentHTML("afterbegin", spans.join(""));
 
-      labelEntries.push({ stateId, pathPoints, pathLength, textEl, needsFitCheck: mode !== "full" && lines.length > 1 });
+      labelEntries.push({
+        stateId,
+        pathPoints,
+        pathLength,
+        textEl,
+        needsFitCheck: mode !== "full" && lines.length > 1
+      });
     }
 
     // Phase 4: read bboxes and fix labels that spill outside their state (reads then targeted writes)
@@ -247,7 +235,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
     maxLakeSize,
     offset,
     lengthMax,
-    lakeCache,
+    lakeCache
   }: {
     stateId: number;
     x0: number;
@@ -261,12 +249,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
   }): { length: number; x: number; y: number } {
     let ray = { length: 0, x: x0, y: y0 };
 
-
-    for (
-      let length = LENGTH_START;
-      length < lengthMax;
-      length += LENGTH_STEP
-    ) {
+    for (let length = LENGTH_START; length < lengthMax; length += LENGTH_STEP) {
       const [x, y] = [x0 + length * dx, y0 + length * dy];
 
       if (!isInsideState(x, y)) break;
@@ -279,11 +262,11 @@ const stateLabelsRenderer = (list?: number[]): void => {
         if (DEBUG.stateLabels) {
           drawPoint(offset1, {
             color: isInsideState(...offset1) ? "blue" : "red",
-            radius: 0.4,
+            radius: 0.4
           });
           drawPoint(offset2, {
             color: isInsideState(...offset2) ? "blue" : "red",
-            radius: 0.4,
+            radius: 0.4
           });
         }
 
@@ -305,8 +288,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
 
       const featureId = cells.f[cellId];
       const feature = features[featureId];
-      if (feature.type === "lake")
-        return isInnerLake(featureId, feature) || isSmallLake(feature);
+      if (feature.type === "lake") return isInnerLake(featureId, feature) || isSmallLake(feature);
 
       return stateIds[cellId] === stateId;
     }
@@ -314,7 +296,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
     function isInnerLake(featureId: number, feature: { shoreline: number[] }): boolean {
       const cached = lakeCache.get(featureId);
       if (cached !== undefined) return cached;
-      const result = feature.shoreline.every((cellId) => stateIds[cellId] === stateId);
+      const result = feature.shoreline.every(cellId => stateIds[cellId] === stateId);
       lakeCache.set(featureId, result);
       return result;
     }
@@ -333,8 +315,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
 
       for (let j = i + 1; j < rays.length; j++) {
         const score2 = rays[j].length * scoreRayAngle(rays[j].angle);
-        const pairScore =
-          (score1 + score2) * scoreCurvature(rays[i].angle, rays[j].angle);
+        const pairScore = (score1 + score2) * scoreCurvature(rays[i].angle, rays[j].angle);
 
         if (pairScore > bestScore) {
           bestScore = pairScore;
@@ -384,12 +365,7 @@ const stateLabelsRenderer = (list?: number[]): void => {
     return 1 - Math.abs(proximity1 - proximity2) / 90;
   }
 
-  function getLinesAndRatio(
-    mode: string,
-    name: string,
-    fullName: string,
-    pathLength: number,
-  ): [string[], number] {
+  function getLinesAndRatio(mode: string, name: string, fullName: string, pathLength: number): [string[], number] {
     if (mode === "short") return getShortOneLine();
     if (pathLength > fullName.length * 2) return getFullOneLine();
     return getFullTwoLines();
@@ -406,19 +382,14 @@ const stateLabelsRenderer = (list?: number[]): void => {
 
     function getFullTwoLines(): [string[], number] {
       const lines = splitInTwo(fullName);
-      const longestLineLength = max(lines.map((line) => line.length)) || 0;
+      const longestLineLength = max(lines.map(line => line.length)) || 0;
       const ratio = pathLength / longestLineLength;
       return [lines, minmax(rn(ratio * 60), 70, 150)];
     }
   }
 
   // check whether multi-lined label is mostly inside the state. If no, replace it with short name label
-  function checkIfInsideState(
-    bbox: DOMRect,
-    angleRad: number,
-    stateIds: TypedArray,
-    stateId: number,
-  ): boolean {
+  function checkIfInsideState(bbox: DOMRect, angleRad: number, stateIds: TypedArray, stateId: number): boolean {
     const [cx, cy] = [bbox.x + bbox.width / 2, bbox.y + bbox.height / 2];
     const halfwidth = bbox.width / 2;
     const halfheight = bbox.height / 2;
@@ -429,20 +400,16 @@ const stateLabelsRenderer = (list?: number[]): void => {
       [+halfwidth, halfheight],
       [-halfwidth, halfheight],
       [0, halfheight],
-      [0, -halfheight],
+      [0, -halfheight]
     ];
 
     const sin = Math.sin(angleRad);
     const cos = Math.cos(angleRad);
-    const rotatedPoints = points.map(([x, y]): [number, number] => [
-      cx + x * cos - y * sin,
-      cy + x * sin + y * cos,
-    ]);
+    const rotatedPoints = points.map(([x, y]): [number, number] => [cx + x * cos - y * sin, cy + x * sin + y * cos]);
 
     let pointsInside = 0;
     for (const [x, y] of rotatedPoints) {
-      const isInside =
-        stateIds[findClosestCell(x, y, undefined, pack) as number] === stateId;
+      const isInside = stateIds[findClosestCell(x, y, undefined, pack) as number] === stateId;
       if (isInside) pointsInside++;
       if (pointsInside > 4) return true;
     }

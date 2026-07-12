@@ -176,17 +176,17 @@ function prepareMapData(): string {
     routes,
     zones,
     ice,
-    JSON.stringify(mapTimeline),                                                         // [40]
-    pack.cells.resource ? Array.from(pack.cells.resource).join(",") : "",                // [41]
-    continents,                                                                          // [42]
+    JSON.stringify(mapTimeline), // [40]
+    pack.cells.resource ? Array.from(pack.cells.resource).join(",") : "", // [41]
+    continents, // [42]
     pack.cells.resourceSecondary ? Array.from(pack.cells.resourceSecondary).join(",") : "", // [43]
-    pack.cells.resourceRichness  ? Array.from(pack.cells.resourceRichness).join(",")  : "", // [44]
-    pack.cells.good ? Array.from(pack.cells.good).join(",") : "",                        // [45]
-    goods,                                                                               // [46]
-    markets,                                                                             // [47]
-    deals,                                                                               // [48]
-    pack.cells.market ? Array.from(pack.cells.market).join(",") : "",                    // [49]
-    customGoodIcons                                                                      // [50]
+    pack.cells.resourceRichness ? Array.from(pack.cells.resourceRichness).join(",") : "", // [44]
+    pack.cells.good ? Array.from(pack.cells.good).join(",") : "", // [45]
+    goods, // [46]
+    markets, // [47]
+    deals, // [48]
+    pack.cells.market ? Array.from(pack.cells.market).join(",") : "", // [49]
+    customGoodIcons // [50]
   ].join("\r\n");
   return mapData;
 }

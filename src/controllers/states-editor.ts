@@ -150,8 +150,10 @@ function addListeners(): void {
     else if (classList.contains("statePopulation")) changePopulation(stateId);
     else if (classList.contains("stateTreasury")) openTreasuryDialog(stateId);
     else if (classList.contains("icon-pin")) toggleFog(stateId, classList);
-    else if (classList.contains("stateSubmap")) { closeDialogs(); openStateSubmapTool(stateId); }
-    else if (classList.contains("icon-target"))
+    else if (classList.contains("stateSubmap")) {
+      closeDialogs();
+      openStateSubmapTool(stateId);
+    } else if (classList.contains("icon-target"))
       highlightElement(regions.select(`#state${stateId}`).node() as Element, 4);
     else if (classList.contains("icon-trash-empty")) stateRemovePrompt(stateId);
     else if (classList.contains("icon-lock") || classList.contains("icon-lock-open"))
@@ -696,9 +698,8 @@ function toggleFog(state: number, cl: DOMTokenList): void {
   if (isFocusing) centerOnState(state);
 }
 
-
 function centerOnState(state) {
-  const node = statesBody.select("#state" + state).node();
+  const node = statesBody.select(`#state${state}`).node();
   if (!node) return;
   const box = node.getBBox();
   const x = box.x + box.width / 2;
@@ -1706,10 +1707,10 @@ function updateLockStatus(stateId: number, classList: DOMTokenList): void {
 }
 
 function showStatesAdvancedStats() {
-  const TIER_COLOR = {Advanced: "#2a7", Industrial: "#e90", "Pre-industrial": "#a44"};
+  const TIER_COLOR = { Advanced: "#2a7", Industrial: "#e90", "Pre-industrial": "#a44" };
 
   const rows = pack.states
-    .filter(s => s && s.i && !s.removed)
+    .filter(s => s?.i && !s.removed)
     .map(s => {
       const d = Routes.getAdvancementDetails(s);
       const rural = rn(s.rural * populationRate);
@@ -1720,11 +1721,13 @@ function showStatesAdvancedStats() {
       const density = area > 0 ? rn(total / area) : 0;
       const color = TIER_COLOR[d.tier] || "#888";
       const bar = `<div style="display:inline-block;width:${d.score}px;max-width:100px;height:8px;background:${color};border-radius:2px;vertical-align:middle;margin-right:4px"></div>`;
-      return {s, d, urbPct, bar, color, density};
+      return { s, d, urbPct, bar, color, density };
     })
     .sort((a, b) => b.d.score - a.d.score);
 
-  const tableRows = rows.map(({s, d, urbPct, bar, color, density}) => /* html */ `
+  const tableRows = rows
+    .map(
+      ({ s, d, urbPct, bar, color, density }) => /* html */ `
     <tr class="advStatsRow" data-id="${s.i}" style="cursor:pointer" title="Click to focus state">
       <td style="padding:2px 6px"><fill-box fill="${s.color}"></fill-box> ${s.name}</td>
       <td style="padding:2px 6px;white-space:nowrap">${bar}<b style="color:${color}">${d.score}</b></td>
@@ -1735,7 +1738,9 @@ function showStatesAdvancedStats() {
       <td style="padding:2px 6px;text-align:right">${d.burgScore}</td>
       <td style="padding:2px 6px;text-align:right">${d.popScore}</td>
       <td style="padding:2px 6px;text-align:right">${d.formPts}</td>
-    </tr>`).join("");
+    </tr>`
+    )
+    .join("");
 
   const html = /* html */ `
     <div style="max-height:70vh;overflow-y:auto">
@@ -1757,19 +1762,23 @@ function showStatesAdvancedStats() {
       </table>
     </div>`;
 
-  const $dlg = $("<div>").html(html).dialog({
-    title: "State Development",
-    resizable: false,
-    width: "auto",
-    position: {my: "center", at: "center", of: "#map"},
-    close() { $(this).dialog("destroy").remove(); }
-  });
+  const $dlg = $("<div>")
+    .html(html)
+    .dialog({
+      title: "State Development",
+      resizable: false,
+      width: "auto",
+      position: { my: "center", at: "center", of: "#map" },
+      close() {
+        $(this).dialog("destroy").remove();
+      }
+    });
 
-  $dlg.on("click", ".advStatsRow", function() {
+  $dlg.on("click", ".advStatsRow", function () {
     const stateId = +this.dataset.id;
     const state = pack.states[stateId];
     if (!state) return;
-    const el = defs.select("#fog #focusState" + stateId);
+    const _el = defs.select(`#fog #focusState${stateId}`);
     zoomTo(state.pole[0], state.pole[1], 4, 1600);
   });
 }

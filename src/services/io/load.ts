@@ -510,9 +510,7 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     pack.goods = data[46] ? JSON.parse(data[46]) : [];
     pack.markets = data[47] ? JSON.parse(data[47]) : [];
     pack.deals = data[48] ? JSON.parse(data[48]) : [];
-    pack.cells.market = data[49]
-      ? Uint16Array.from(data[49].split(","), Number)
-      : new Uint16Array(pack.cells.i.length);
+    pack.cells.market = data[49] ? Uint16Array.from(data[49].split(","), Number) : new Uint16Array(pack.cells.i.length);
 
     // data[50]: custom good icons
     if (data[50]) {

@@ -68,7 +68,7 @@ class UndoRedoModule {
     if (obj instanceof Int16Array) return Int16Array.from(obj);
     if (obj instanceof Float32Array) return Float32Array.from(obj);
     if (obj instanceof Float64Array) return Float64Array.from(obj);
-    if (Array.isArray(obj)) return obj.map((item) => this.clone(item));
+    if (Array.isArray(obj)) return obj.map(item => this.clone(item));
     const cloned: Record<string, any> = {};
     for (const key of Object.keys(obj)) {
       cloned[key] = this.clone(obj[key]);

@@ -28,6 +28,9 @@ declare global {
   var urbanization: number;
   var distanceScale: number;
   var nameBases: NameBase[];
+  var mapTimeline: any[];
+  var useSphericalArea: boolean;
+  function assignResources(): void;
 
   var pointsInput: HTMLInputElement;
   var culturesInput: HTMLInputElement;
@@ -109,8 +112,6 @@ declare global {
   var roads: Selection<SVGGElement, unknown, null, undefined>;
   var trails: Selection<SVGGElement, unknown, null, undefined>;
   var searoutes: Selection<SVGGElement, unknown, null, undefined>;
-  var prec: Selection<SVGGElement, unknown, null, undefined>;
-  var population: Selection<SVGGElement, unknown, null, undefined>;
   var icons: Selection<SVGGElement, unknown, null, undefined>;
   var ruler: Selection<SVGGElement, unknown, null, undefined>;
   var fogging: Selection<SVGGElement, unknown, null, undefined>;

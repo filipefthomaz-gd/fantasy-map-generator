@@ -54,7 +54,9 @@ function getPrecValues(): Float32Array {
 }
 
 function buildThresholds(values: Float32Array): number[] {
-  const nonZero = Array.from(values).filter(v => v > 0).sort((a, b) => a - b);
+  const nonZero = Array.from(values)
+    .filter(v => v > 0)
+    .sort((a, b) => a - b);
   if (!nonZero.length) return [];
 
   return Array.from({ length: LEVELS }, (_, i) => {
@@ -76,11 +78,15 @@ function drawCellsChoropleth(): void {
 
     let bucket = 1;
     for (let j = levels - 1; j >= 0; j--) {
-      if (values[i] >= thresholds[j]) { bucket = j + 1; break; }
+      if (values[i] >= thresholds[j]) {
+        bucket = j + 1;
+        break;
+      }
     }
 
     const polygon = (packCells.v[i] as number[]).map((v: number) => vertices.p[v] as [number, number]);
-    bucketPaths[bucket] += "M" + polygon.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join("L") + "Z";
+    bucketPaths[bucket] +=
+      `M${polygon.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join("L")}Z`;
   }
 
   for (let bucket = 1; bucket <= levels; bucket++) {
@@ -137,10 +143,14 @@ function drawProvinceChoropleth(): void {
     if (!values[i]) continue;
     let bucket = 1;
     for (let j = levels - 1; j >= 0; j--) {
-      if (values[i] >= thresholds[j]) { bucket = j + 1; break; }
+      if (values[i] >= thresholds[j]) {
+        bucket = j + 1;
+        break;
+      }
     }
     const polygon = (packCells.v[i] as number[]).map((v: number) => vertices.p[v] as [number, number]);
-    bucketPaths[bucket] += "M" + polygon.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join("L") + "Z";
+    bucketPaths[bucket] +=
+      `M${polygon.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join("L")}Z`;
   }
 
   for (let bucket = 1; bucket <= levels; bucket++) {
@@ -162,7 +172,7 @@ function drawSymbols(): void {
   const { cells, points } = grid;
   const cellsNumberModifier = ((window as any).pointsInput.dataset.cells / 10000) ** 0.25;
   const data = cells.i.filter((i: number) => cells.h[i] >= 20 && cells.prec[i]);
-  const getRadius = (p: number) => Math.round(Math.sqrt(p / 4) / cellsNumberModifier * 100) / 100;
+  const getRadius = (p: number) => Math.round((Math.sqrt(p / 4) / cellsNumberModifier) * 100) / 100;
 
   prec
     .selectAll("circle")
@@ -188,9 +198,13 @@ function drawLegend(): void {
   const g = prec.append("g").attr("id", "precipLegend").attr("stroke", "none").style("text-shadow", "none");
 
   g.append("rect")
-    .attr("x", x0).attr("y", y0)
-    .attr("width", LEGEND_W).attr("height", legendH)
-    .attr("fill", "white").attr("fill-opacity", 0.65).attr("rx", 3);
+    .attr("x", x0)
+    .attr("y", y0)
+    .attr("width", LEGEND_W)
+    .attr("height", legendH)
+    .attr("fill", "white")
+    .attr("fill-opacity", 0.65)
+    .attr("rx", 3);
 
   // Mode toggle buttons
   const toggleY = y0 + LEGEND_PADDING;
@@ -199,7 +213,7 @@ function drawLegend(): void {
   const modes: { mode: PrecipitationMode; label: string }[] = [
     { mode: "cells", label: "Cells" },
     { mode: "symbols", label: "Symbols" },
-    { mode: "province", label: "Province" },
+    { mode: "province", label: "Province" }
   ];
 
   modes.forEach(({ mode, label }, idx) => {
@@ -213,7 +227,9 @@ function drawLegend(): void {
   g.append("text")
     .attr("x", x0 + LEGEND_PADDING)
     .attr("y", y0 + LEGEND_PADDING + 18 + 8)
-    .style("font-size", "7px").attr("font-weight", "bold").attr("fill", "#333")
+    .style("font-size", "7px")
+    .attr("font-weight", "bold")
+    .attr("fill", "#333")
     .text("Precipitation (mm/yr)");
 
   // Color rows (highest first)
@@ -224,9 +240,12 @@ function drawLegend(): void {
     const swatchY = y0 + LEGEND_PADDING + 18 + 14 + row * rowH;
 
     g.append("rect")
-      .attr("x", x0 + LEGEND_PADDING).attr("y", swatchY)
-      .attr("width", SWATCH_SIZE).attr("height", SWATCH_SIZE)
-      .attr("fill", fillColor).attr("fill-opacity", 0.72)
+      .attr("x", x0 + LEGEND_PADDING)
+      .attr("y", swatchY)
+      .attr("width", SWATCH_SIZE)
+      .attr("height", SWATCH_SIZE)
+      .attr("fill", fillColor)
+      .attr("fill-opacity", 0.72)
       .attr("stroke", color(fillColor)!.darker(0.3).toString())
       .attr("stroke-width", 0.5);
 
@@ -234,7 +253,8 @@ function drawLegend(): void {
     g.append("text")
       .attr("x", x0 + LEGEND_PADDING + LEGEND_TEXT_OFFSET)
       .attr("y", swatchY + SWATCH_SIZE - 2)
-      .style("font-size", "6px").attr("fill", "#333")
+      .style("font-size", "6px")
+      .attr("fill", "#333")
       .text(`≥ ${si(mmVal)} mm`);
   }
 }
@@ -246,20 +266,25 @@ function drawToggleButton(
   w: number,
   label: string,
   active: boolean,
-  onClick: () => void,
+  onClick: () => void
 ): void {
   const h = 14;
   g.append("rect")
-    .attr("x", x).attr("y", y).attr("width", w).attr("height", h)
+    .attr("x", x)
+    .attr("y", y)
+    .attr("width", w)
+    .attr("height", h)
     .attr("fill", active ? "#2166ac" : "#eee")
     .attr("rx", 2)
     .style("cursor", "pointer")
     .on("click", onClick);
 
   g.append("text")
-    .attr("x", x + w / 2).attr("y", y + h - 4)
+    .attr("x", x + w / 2)
+    .attr("y", y + h - 4)
     .attr("text-anchor", "middle")
-    .style("font-size", "6px").attr("font-weight", active ? "bold" : "normal")
+    .style("font-size", "6px")
+    .attr("font-weight", active ? "bold" : "normal")
     .attr("fill", active ? "white" : "#555")
     .style("cursor", "pointer")
     .on("click", onClick)

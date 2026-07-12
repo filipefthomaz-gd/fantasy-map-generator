@@ -49,7 +49,7 @@ const populationRenderer = (): void => {
     // Convert to people/km² (using mean cell area) so both modes share the same scale
     const rawDensity = buildCellDensity(cells, burgs, urbanizationRate, n);
     const density = new Float32Array(n);
-    for (const i of cells.i) density[i] = rawDensity[i] * popRate / meanCellAreaReal;
+    for (const i of cells.i) density[i] = (rawDensity[i] * popRate) / meanCellAreaReal;
     const thresholds = buildThresholds(density);
     drawDensityLayers(density, thresholds, cells, vertices, n);
     drawLegend(thresholds, distUnit);
@@ -57,7 +57,7 @@ const populationRenderer = (): void => {
     // Cell mode: per-cell choropleth — sharp Voronoi boundaries, no smoothing
     const rawDensity = buildCellDensity(cells, burgs, urbanizationRate, n, 0);
     const density = new Float32Array(n);
-    for (const i of cells.i) density[i] = rawDensity[i] * popRate / meanCellAreaReal;
+    for (const i of cells.i) density[i] = (rawDensity[i] * popRate) / meanCellAreaReal;
     const thresholds = buildThresholds(density);
     drawCellLayer(density, thresholds);
     drawLegend(thresholds, distUnit);
@@ -68,7 +68,13 @@ const populationRenderer = (): void => {
 
 // ─── Cell mode ───────────────────────────────────────────────────────────────
 
-function buildCellDensity(cells: any, burgs: any[], urbanizationRate: number, n: number, smoothPasses = 2): Float32Array {
+function buildCellDensity(
+  cells: any,
+  burgs: any[],
+  urbanizationRate: number,
+  n: number,
+  smoothPasses = 2
+): Float32Array {
   const density = new Float32Array(n);
 
   for (const i of cells.i) {
@@ -107,7 +113,10 @@ function buildCellDensity(cells: any, burgs: any[], urbanizationRate: number, n:
     for (const i of cells.i) {
       if (cells.h[i] < 20) continue;
       const landNb = cells.c[i].filter((nb: number) => cells.h[nb] >= 20);
-      if (!landNb.length) { smoothed[i] = density[i]; continue; }
+      if (!landNb.length) {
+        smoothed[i] = density[i];
+        continue;
+      }
       const nbSum = landNb.reduce((s: number, nb: number) => s + density[nb], 0);
       smoothed[i] = (density[i] * 4 + nbSum) / (4 + landNb.length);
     }
@@ -127,10 +136,10 @@ function buildProvinceDensities(
   burgs: any[],
   urbanizationRate: number,
   popRate: number,
-  dScale: number,
+  dScale: number
 ): Float64Array {
   const { provinces } = pack;
-  const provPop  = new Float64Array(provinces.length);
+  const provPop = new Float64Array(provinces.length);
   const provArea = new Float64Array(provinces.length);
 
   for (const i of cells.i) {
@@ -138,7 +147,7 @@ function buildProvinceDensities(
     if (!pId) continue;
     const areaPx = cells.latCosine ? cells.area[i] * cells.latCosine[i] : cells.area[i];
     provArea[pId] += areaPx * dScale * dScale;
-    provPop[pId]  += cells.pop[i] * popRate;
+    provPop[pId] += cells.pop[i] * popRate;
   }
 
   for (const burg of burgs) {
@@ -170,7 +179,10 @@ function drawProvinceLayers(provDensity: Float64Array, thresholds: number[]): vo
     // Highest threshold the province density meets
     let ti = 0;
     for (let j = levels - 1; j >= 0; j--) {
-      if (pDensity >= thresholds[j]) { ti = j; break; }
+      if (pDensity >= thresholds[j]) {
+        ti = j;
+        break;
+      }
     }
     const tFraction = ti / (levels - 1);
     const fillColor = interpolateYlOrRd(0.08 + tFraction * 0.92);
@@ -201,7 +213,10 @@ function drawCellLayer(density: Float32Array, thresholds: number[]): void {
     if (!density[i]) continue;
     cellBucket[i] = 1;
     for (let j = levels - 1; j >= 0; j--) {
-      if (density[i] >= thresholds[j]) { cellBucket[i] = j + 1; break; }
+      if (density[i] >= thresholds[j]) {
+        cellBucket[i] = j + 1;
+        break;
+      }
     }
   }
 
@@ -212,7 +227,8 @@ function drawCellLayer(density: Float32Array, thresholds: number[]): void {
     const bucket = cellBucket[i];
     if (!bucket) continue;
     const polygon = (packCells.v[i] as number[]).map((v: number) => vertices.p[v] as [number, number]);
-    bucketPaths[bucket] += "M" + polygon.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join("L") + "Z";
+    bucketPaths[bucket] +=
+      `M${polygon.map(([x, y]) => `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`).join("L")}Z`;
   }
 
   for (let bucket = 1; bucket <= levels; bucket++) {
@@ -231,7 +247,9 @@ function drawCellLayer(density: Float32Array, thresholds: number[]): void {
 // ─── Shared drawing ──────────────────────────────────────────────────────────
 
 function buildThresholds(density: Float32Array): number[] {
-  const nonZero = Array.from(density).filter(d => d > 0).sort((a, b) => a - b);
+  const nonZero = Array.from(density)
+    .filter(d => d > 0)
+    .sort((a, b) => a - b);
   if (!nonZero.length) return [];
 
   const logSorted = nonZero.map(d => Math.log(d)).sort((a, b) => a - b);
@@ -240,10 +258,7 @@ function buildThresholds(density: Float32Array): number[] {
 
   return Array.from({ length: LEVELS }, (_, i) => {
     const t = i / (LEVELS - 1);
-    const logPercentile = logSorted[Math.min(
-      Math.floor((0.05 + t * 0.95) * logSorted.length),
-      logSorted.length - 1,
-    )];
+    const logPercentile = logSorted[Math.min(Math.floor((0.05 + t * 0.95) * logSorted.length), logSorted.length - 1)];
     const logLinear = logMin + t * (logMax - logMin);
     return Math.exp((1 - t) * logPercentile + t * logLinear);
   }).filter((t, i, arr) => i === 0 || t > arr[i - 1] * 1.05);
@@ -265,7 +280,9 @@ function drawDensityLayers(density: Float32Array, thresholds: number[], cells: a
     const fillColor = interpolateYlOrRd(0.08 + tFraction * 0.92);
 
     const checkedCells = new Uint8Array(n);
-    const addToChecked = (cellId: number) => { checkedCells[cellId] = 1; };
+    const addToChecked = (cellId: number) => {
+      checkedCells[cellId] = 1;
+    };
     const ofSameType = (cellId: number) => density[cellId] >= t;
     let path = "";
 
@@ -276,7 +293,7 @@ function drawDensityLayers(density: Float32Array, thresholds: number[], cells: a
       checkedCells[cellId] = 1;
       const chain = connectVertices({ vertices, startingVertex: startVertex, ofSameType, addToChecked });
       const relaxed = chain.filter(
-        (v: number, idx: number) => idx % 3 === 0 || vertices.c[v].some((c: number) => c >= n),
+        (v: number, idx: number) => idx % 3 === 0 || vertices.c[v].some((c: number) => c >= n)
       );
       if (relaxed.length < 4) continue;
       path += round(lineGen(relaxed.map((v: number) => vertices.p[v] as [number, number])) || "");
@@ -292,7 +309,7 @@ function findStart(
   ofSameType: (c: number) => boolean,
   cells: any,
   vertices: any,
-  n: number,
+  n: number
 ): number | undefined {
   if (cells.b[cellId]) {
     return cells.v[cellId].find((v: number) => vertices.c[v].some((c: number) => c >= n));
@@ -321,9 +338,13 @@ function drawLegend(thresholds: number[], distUnit: string): void {
 
   // Background
   g.append("rect")
-    .attr("x", x0).attr("y", y0)
-    .attr("width", legendW).attr("height", legendH)
-    .attr("fill", "white").attr("fill-opacity", 0.65).attr("rx", 3);
+    .attr("x", x0)
+    .attr("y", y0)
+    .attr("width", legendW)
+    .attr("height", legendH)
+    .attr("fill", "white")
+    .attr("fill-opacity", 0.65)
+    .attr("rx", 3);
 
   // ── Toggle bar ──
   const toggleY = y0 + LEGEND_PADDING;
@@ -331,8 +352,8 @@ function drawLegend(thresholds: number[], distUnit: string): void {
 
   const modes: { mode: PopulationMode; label: string }[] = [
     { mode: "province", label: "Province" },
-    { mode: "isoline",  label: "Isoline"  },
-    { mode: "cell",     label: "Cell"     },
+    { mode: "isoline", label: "Isoline" },
+    { mode: "cell", label: "Cell" }
   ];
   modes.forEach(({ mode, label }, idx) => {
     drawToggleButton(g, x0 + LEGEND_PADDING + idx * btnW, toggleY, btnW, label, populationMode === mode, () => {
@@ -345,7 +366,9 @@ function drawLegend(thresholds: number[], distUnit: string): void {
   g.append("text")
     .attr("x", x0 + LEGEND_PADDING)
     .attr("y", y0 + LEGEND_PADDING + 18 + 8)
-    .attr("font-size", 7).attr("font-weight", "bold").attr("fill", "#333")
+    .attr("font-size", 7)
+    .attr("font-weight", "bold")
+    .attr("fill", "#333")
     .text(`Pop. density (/${areaUnit})`);
 
   // ── Colour rows ──
@@ -356,16 +379,20 @@ function drawLegend(thresholds: number[], distUnit: string): void {
     const swatchY = y0 + LEGEND_PADDING + 18 + 14 + row * rowH;
 
     g.append("rect")
-      .attr("x", x0 + LEGEND_PADDING).attr("y", swatchY)
-      .attr("width", SWATCH_SIZE).attr("height", SWATCH_SIZE)
-      .attr("fill", fillColor).attr("fill-opacity", 0.72)
+      .attr("x", x0 + LEGEND_PADDING)
+      .attr("y", swatchY)
+      .attr("width", SWATCH_SIZE)
+      .attr("height", SWATCH_SIZE)
+      .attr("fill", fillColor)
+      .attr("fill-opacity", 0.72)
       .attr("stroke", color(fillColor)!.darker(0.3).toString())
       .attr("stroke-width", 0.5);
 
     g.append("text")
       .attr("x", x0 + LEGEND_PADDING + LEGEND_TEXT_OFFSET)
       .attr("y", swatchY + SWATCH_SIZE - 2)
-      .attr("font-size", 6).attr("fill", "#333")
+      .attr("font-size", 6)
+      .attr("fill", "#333")
       .text(`≥ ${si(toRealDensity(thresholds[i]))}`);
   }
 }
@@ -377,20 +404,25 @@ function drawToggleButton(
   w: number,
   label: string,
   active: boolean,
-  onClick: () => void,
+  onClick: () => void
 ): void {
   const h = 14;
   g.append("rect")
-    .attr("x", x).attr("y", y).attr("width", w).attr("height", h)
+    .attr("x", x)
+    .attr("y", y)
+    .attr("width", w)
+    .attr("height", h)
     .attr("fill", active ? "#d73027" : "#eee")
     .attr("rx", 2)
     .style("cursor", "pointer")
     .on("click", onClick);
 
   g.append("text")
-    .attr("x", x + w / 2).attr("y", y + h - 4)
+    .attr("x", x + w / 2)
+    .attr("y", y + h - 4)
     .attr("text-anchor", "middle")
-    .attr("font-size", 6).attr("font-weight", active ? "bold" : "normal")
+    .attr("font-size", 6)
+    .attr("font-weight", active ? "bold" : "normal")
     .attr("fill", active ? "white" : "#555")
     .style("cursor", "pointer")
     .on("click", onClick)

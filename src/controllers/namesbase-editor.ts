@@ -6,7 +6,7 @@ const HISTORY_KEY = "namesbase";
 function pushNamesbaseSnapshot(): void {
   UndoRedo.push(
     HISTORY_KEY,
-    nameBases.map((b) => ({ ...b })),
+    nameBases.map(b => ({ ...b }))
   );
 }
 
@@ -39,7 +39,7 @@ function open(): void {
   undoBtn.on("click", () => {
     const snapshot = UndoRedo.undo(
       HISTORY_KEY,
-      nameBases.map((b) => ({ ...b })),
+      nameBases.map(b => ({ ...b }))
     );
     if (snapshot) restoreNamesbaseSnapshot(snapshot);
     syncButtons();
@@ -47,7 +47,7 @@ function open(): void {
   redoBtn.on("click", () => {
     const snapshot = UndoRedo.redo(
       HISTORY_KEY,
-      nameBases.map((b) => ({ ...b })),
+      nameBases.map(b => ({ ...b }))
     );
     if (snapshot) restoreNamesbaseSnapshot(snapshot);
     syncButtons();

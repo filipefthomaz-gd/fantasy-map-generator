@@ -64,7 +64,10 @@ function buildGoodsCellsContent(displayedGoods: Set<number>): string {
       // Skip water cells with no populated neighbours — avoids getCellProduction for deep ocean
       let hasNeighborPop = false;
       for (const nc of pack.cells.c[cellId]) {
-        if (pack.cells.pop[nc]) { hasNeighborPop = true; break; }
+        if (pack.cells.pop[nc]) {
+          hasNeighborPop = true;
+          break;
+        }
       }
       if (!hasNeighborPop) continue;
     } else if (!pack.cells.pop[cellId]) {
@@ -131,7 +134,7 @@ function buildGoodsCellsContent(displayedGoods: Set<number>): string {
     const bucket = key % OPACITY_BUCKETS;
     const good = Goods.get(goodId);
     if (!good) continue;
-    const opacity = rn(0.1 + 0.9 * (bucket + 0.5) / OPACITY_BUCKETS, 2);
+    const opacity = rn(0.1 + (0.9 * (bucket + 0.5)) / OPACITY_BUCKETS, 2);
     html.push(`<path d="${parts.join("")}" fill="${good.color}" fill-opacity="${opacity}" stroke="none"/>`);
   }
   return html.join("");
@@ -160,9 +163,11 @@ function buildGoodsIconsContent(displayedGoods: Set<number>): string {
       stroke = Goods.getStroke(good.color);
       strokeCache.set(good.color, stroke);
     }
-    html.push(`<g data-i="${good.i}">${
-      drawCircle ? `<circle cx="${x}" cy="${y}" r="${half}" fill="${good.color}" stroke="${stroke}" />` : ""
-    }<use href="#${good.icon}" x="${rn(x - half, 2)}" y="${rn(y - half, 2)}" width="${iconSize}" height="${iconSize}"/></g>`);
+    html.push(
+      `<g data-i="${good.i}">${
+        drawCircle ? `<circle cx="${x}" cy="${y}" r="${half}" fill="${good.color}" stroke="${stroke}" />` : ""
+      }<use href="#${good.icon}" x="${rn(x - half, 2)}" y="${rn(y - half, 2)}" width="${iconSize}" height="${iconSize}"/></g>`
+    );
   }
   return html.join("");
 }

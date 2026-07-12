@@ -18,14 +18,12 @@ const CONTINENT_GROUPS = new Set(["continent", "island"]);
 class ContinentsModule {
   generate() {
     const continentFeatures = pack.features.filter(
-      (f): f is PackedGraphFeature => !!f && CONTINENT_GROUPS.has(f.group),
+      (f): f is PackedGraphFeature => !!f && CONTINENT_GROUPS.has(f.group)
     );
 
     const colors = getColors(continentFeatures.length);
 
-    const continents: Continent[] = [
-      {i: 0, name: "Ocean", color: "", feature: 0},
-    ];
+    const continents: Continent[] = [{ i: 0, name: "Ocean", color: "", feature: 0 }];
 
     continentFeatures.forEach((feature, idx) => {
       const dominantCulture = this.getDominantCulture(feature);
@@ -34,7 +32,7 @@ class ContinentsModule {
         i: idx + 1,
         name,
         color: colors[idx] || getRandomColor(),
-        feature: feature.i,
+        feature: feature.i
       });
     });
 

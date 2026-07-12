@@ -31,12 +31,9 @@ const featuresRenderer = (): void => {
   for (const feature of pack.features) {
     if (!feature || feature.type === "ocean") continue;
 
-    const fillRule =
-      feature.type === "lake" && feature.innerIslands?.length
-        ? ' fill-rule="evenodd"'
-        : "";
+    const fillRule = feature.type === "lake" && feature.innerIslands?.length ? ' fill-rule="evenodd"' : "";
     html.paths.push(
-      `<path d="${featurePathRenderer(feature)}" id="feature_${feature.i}" data-f="${feature.i}"${fillRule}></path>`,
+      `<path d="${featurePathRenderer(feature)}" id="feature_${feature.i}" data-f="${feature.i}"${fillRule}></path>`
     );
 
     if (feature.type === "lake") {

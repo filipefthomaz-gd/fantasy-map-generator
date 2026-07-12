@@ -44,6 +44,9 @@ export interface PackedGraph {
     continent?: TypedArray; // cell continent id
     good: Uint16Array; // cell good id
     market: Uint16Array; // cell market id
+    resource?: Uint8Array; // cell resource id (legacy resources layer)
+    resourceSecondary?: Uint8Array; // cell secondary resource id
+    resourceRichness?: Uint8Array; // cell resource richness
     routes: Record<number, Record<number, number>>;
   };
   vertices: {

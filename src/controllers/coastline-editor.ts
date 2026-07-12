@@ -148,9 +148,7 @@ function pushCoastlineSnapshot(): void {
   UndoRedo.push(HISTORY_KEY, { ...defaultCoastSettings });
 }
 
-function restoreCoastlineSnapshot(
-  snapshot: Record<string, number | boolean>,
-): void {
+function restoreCoastlineSnapshot(snapshot: Record<string, number | boolean>): void {
   Object.assign(defaultCoastSettings, snapshot);
   for (const { id, key } of SLIDER_DEFS) {
     const val = defaultCoastSettings[key];

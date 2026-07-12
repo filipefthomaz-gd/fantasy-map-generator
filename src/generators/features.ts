@@ -340,15 +340,13 @@ class FeatureModule {
   resolveInnerIslands() {
     const { cells, vertices } = pack;
     const features = pack.features;
-    const lakes = features.filter((f) => f && f.type === "lake");
-    const islands = features.filter((f) => f && f.land && !f.border);
+    const lakes = features.filter(f => f && f.type === "lake");
+    const islands = features.filter(f => f?.land && !f.border);
 
     for (const lake of lakes) {
       if (!lake.vertices?.length) continue;
       delete lake.innerIslands;
-      const lakePolygon = lake.vertices.map(
-        (v) => vertices.p[v],
-      ) as [number, number][];
+      const lakePolygon = lake.vertices.map(v => vertices.p[v]) as [number, number][];
 
       for (const island of islands) {
         const islandCenter = cells.p[island.firstCell] as [number, number];

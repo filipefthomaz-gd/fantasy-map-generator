@@ -22,11 +22,7 @@ export class Voronoi {
   cells: Cells = { v: [], c: [], b: [], i: new Uint32Array() }; // voronoi cells: v = cell vertices, c = adjacent cells, b = near-border cell, i = cell indexes;
   vertices: Vertices = { p: [], v: [], c: [] }; // cells vertices: p = vertex coordinates, v = neighboring vertices, c = adjacent cells
 
-  constructor(
-    delaunay: Delaunator<Float64Array<ArrayBufferLike>>,
-    points: Point[],
-    pointsN: number,
-  ) {
+  constructor(delaunay: Delaunator<Float64Array<ArrayBufferLike>>, points: Point[], pointsN: number) {
     this.delaunay = delaunay;
     this.points = points;
     this.pointsN = pointsN;
@@ -41,7 +37,7 @@ export class Voronoi {
       const p = triangles[nextE];
       if (p < this.pointsN && !this.cells.c[p]) {
         const edges = this.edgesAroundPoint(e);
-        this.cells.v[p] = edges.map((e) => Math.floor(e / 3)); // cell: adjacent vertex
+        this.cells.v[p] = edges.map(e => Math.floor(e / 3)); // cell: adjacent vertex
         const adjCells: number[] = [];
         for (const edge of edges) {
           const c = triangles[edge];
@@ -61,7 +57,7 @@ export class Voronoi {
         this.vertices.v[t] = [
           Math.floor(halfedges[e0] / 3),
           Math.floor(halfedges[e0 + 1] / 3),
-          Math.floor(halfedges[e0 + 2] / 3),
+          Math.floor(halfedges[e0 + 2] / 3)
         ]; // vertex: adjacent vertices
         this.vertices.c[t] = [triangles[e0], triangles[e0 + 1], triangles[e0 + 2]]; // vertex: adjacent cells
       }
@@ -117,7 +113,7 @@ export class Voronoi {
     const D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
     return [
       Math.floor((1 / D) * (ad * (by - cy) + bd * (cy - ay) + cd * (ay - by))),
-      Math.floor((1 / D) * (ad * (cx - bx) + bd * (ax - cx) + cd * (bx - ax))),
+      Math.floor((1 / D) * (ad * (cx - bx) + bd * (ax - cx) + cd * (bx - ax)))
     ];
   }
 }
