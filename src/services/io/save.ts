@@ -176,7 +176,7 @@ function prepareMapData(): string {
     routes,
     zones,
     ice,
-    JSON.stringify(mapTimeline), // [40]
+    "", // [40] mapTimeline intentionally not persisted (bloats save size, not restored on load)
     pack.cells.resource ? Array.from(pack.cells.resource).join(",") : "", // [41]
     continents, // [42]
     pack.cells.resourceSecondary ? Array.from(pack.cells.resourceSecondary).join(",") : "", // [43]

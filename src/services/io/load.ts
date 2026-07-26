@@ -485,7 +485,7 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     // data[28] had deprecated cells.crossroad
     pack.cells.routes = data[36] ? JSON.parse(data[36]) : {};
     pack.ice = data[39] ? JSON.parse(data[39]) : [];
-    mapTimeline = data[40] ? JSON.parse(data[40]) : [];
+    mapTimeline = []; // not persisted in save file, see save.ts
     if (data[41]) {
       pack.cells.resource = Uint8Array.from(data[41].split(","), Number);
     } else {
