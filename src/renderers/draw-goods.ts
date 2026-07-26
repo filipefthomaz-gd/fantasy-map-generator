@@ -1,5 +1,6 @@
 import type { Good } from "../generators/goods-generator";
 import { normalize, rn } from "../utils";
+import { getIsolines } from "../utils/pathUtils";
 
 const SUBGROUPS = ["goodsCells", "goodsIcons", "goodsBurgs"] as const;
 
@@ -97,45 +98,41 @@ function buildGoodsCellsContent(displayedGoods: Set<number>): string {
   }
   if (maxTotal === 0) return "";
 
-  // Second pass: bucket cells by (goodId × opacity level) and build one <path>
-  // per bucket — reduces potentially 20 000 <polygon> elements to at most
-  // goods × OPACITY_BUCKETS elements (e.g. 20 goods × 10 = 200 paths).
+  // Second pass: bucket cells by (goodId × opacity level) and trace the dissolved
+  // outline of each bucket's region via getIsolines — same technique drawStates/
+  // drawProvinces/drawBiomes use. This skips interior edges between adjacent cells
+  // of the same bucket, which matters a lot for widely-produced goods: without it,
+  // every internal cell-to-cell edge across a large contiguous region gets baked
+  // into the path even though it's invisible under the fill, ballooning path
+  // complexity (and zoom/pan repaint cost) for exactly the goods with the most
+  // cells — i.e. usually the highest total value.
   const OPACITY_BUCKETS = 10;
-  const { cells: packCells, vertices } = pack;
 
-  // Numeric key: goodId * OPACITY_BUCKETS + bucket → string[] of sub-paths (push is O(1))
-  const bucketParts = new Map<number, string[]>();
-
-  for (const [cellId, { dominantGoodId, total }] of cellTotals) {
-    const t = normalize(total, 0, maxTotal);
+  const getBucketKey = (cellId: number): number | null => {
+    const entry = cellTotals.get(cellId);
+    if (!entry) return null;
+    const t = normalize(entry.total, 0, maxTotal);
     const bucket = Math.min(OPACITY_BUCKETS - 1, Math.floor(t * OPACITY_BUCKETS));
-    const key = dominantGoodId * OPACITY_BUCKETS + bucket;
+    return entry.dominantGoodId * OPACITY_BUCKETS + bucket;
+  };
 
-    const verts = packCells.v[cellId] as number[];
-    let sub = "M";
-    for (let vi = 0; vi < verts.length; vi++) {
-      const [x, y] = vertices.p[verts[vi]] as [number, number];
-      if (vi) sub += "L";
-      sub += `${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
-    }
-    sub += "Z";
-
-    const parts = bucketParts.get(key);
-    if (parts) parts.push(sub);
-    else bucketParts.set(key, [sub]);
-  }
+  const isolines = getIsolines(pack, getBucketKey, { fill: true });
 
   // Emit one <path> per bucket — sorted so lighter bands render first
-  const sorted = [...bucketParts.entries()].sort((a, b) => (a[0] % OPACITY_BUCKETS) - (b[0] % OPACITY_BUCKETS));
+  const sorted = Object.entries(isolines).sort(
+    (a, b) => (+a[0] % OPACITY_BUCKETS) - (+b[0] % OPACITY_BUCKETS)
+  );
 
   const html: string[] = [];
-  for (const [key, parts] of sorted) {
+  for (const [keyStr, { fill }] of sorted) {
+    if (!fill) continue;
+    const key = +keyStr;
     const goodId = Math.floor(key / OPACITY_BUCKETS);
     const bucket = key % OPACITY_BUCKETS;
     const good = Goods.get(goodId);
     if (!good) continue;
     const opacity = rn(0.1 + (0.9 * (bucket + 0.5)) / OPACITY_BUCKETS, 2);
-    html.push(`<path d="${parts.join("")}" fill="${good.color}" fill-opacity="${opacity}" stroke="none"/>`);
+    html.push(`<path d="${fill}" fill="${good.color}" fill-opacity="${opacity}" stroke="none"/>`);
   }
   return html.join("");
 }
