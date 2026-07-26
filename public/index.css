@@ -80,6 +80,14 @@ iframe {
   user-select: none;
 }
 
+/* Pan/zoom sets #viewbox's transform attribute every frame (see zoomRaf in main.js).
+   will-change hints the browser to promote it to its own compositor layer, so panning
+   translates/scales an already-rasterized bitmap on the GPU instead of re-rasterizing
+   every fill path in the tree on every frame. */
+#viewbox {
+  will-change: transform;
+}
+
 #canvas {
   position: absolute;
   pointer-events: none;

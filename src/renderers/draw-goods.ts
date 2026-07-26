@@ -116,12 +116,12 @@ function buildGoodsCellsContent(displayedGoods: Set<number>): string {
     return entry.dominantGoodId * OPACITY_BUCKETS + bucket;
   };
 
-  const isolines = getIsolines(pack, getBucketKey, { fill: true });
+  // Regions are solid fills, not borders, so sub-pixel-ish jitter along the boundary is
+  // invisible at normal zoom — thin it out to cut per-frame repaint cost during pan/zoom.
+  const isolines = getIsolines(pack, getBucketKey, { fill: true, simplifyTolerance: 1.5 });
 
   // Emit one <path> per bucket — sorted so lighter bands render first
-  const sorted = Object.entries(isolines).sort(
-    (a, b) => (+a[0] % OPACITY_BUCKETS) - (+b[0] % OPACITY_BUCKETS)
-  );
+  const sorted = Object.entries(isolines).sort((a, b) => (+a[0] % OPACITY_BUCKETS) - (+b[0] % OPACITY_BUCKETS));
 
   const html: string[] = [];
   for (const [keyStr, { fill }] of sorted) {

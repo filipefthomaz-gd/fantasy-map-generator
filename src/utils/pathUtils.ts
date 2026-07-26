@@ -9,10 +9,29 @@ import { rn } from "./numberUtils";
  * @param {number[]} vertexChain - An array of vertex IDs defining the shape.
  * @returns {string} SVG path data for the filled shape.
  */
-const getFillPath = (vertices: Vertices, vertexChain: number[]): string => {
-  const points = vertexChain.map(vertexId => vertices.p[vertexId]);
+const getFillPath = (vertices: Vertices, vertexChain: number[], simplifyTolerance?: number): string => {
+  let points = vertexChain.map(vertexId => vertices.p[vertexId]);
+  if (simplifyTolerance) points = decimatePoints(points, simplifyTolerance);
   const firstPoint = points.shift();
   return `M${firstPoint} L${points.join(" ")} Z`;
+};
+
+// Drops points that are within `tolerance` px of the last kept point. Cheap stand-in for
+// full polyline simplification — good enough to thin dense voronoi-edge chains where many
+// consecutive points are visually indistinguishable at normal zoom, without the cost of a
+// proper Douglas-Peucker pass. Never drops below a triangle so the ring stays a valid shape.
+const decimatePoints = (points: Point[], tolerance: number): Point[] => {
+  if (points.length <= 3) return points;
+  const kept: Point[] = [points[0]];
+  const toleranceSq = tolerance * tolerance;
+  for (let i = 1; i < points.length; i++) {
+    const [px, py] = points[i];
+    const [lx, ly] = kept[kept.length - 1];
+    const dx = px - lx;
+    const dy = py - ly;
+    if (dx * dx + dy * dy >= toleranceSq) kept.push(points[i]);
+  }
+  return kept.length >= 3 ? kept : points;
 };
 
 /**
@@ -89,6 +108,7 @@ export const getIsolines = (
     fill?: boolean;
     halo?: boolean;
     waterGap?: boolean;
+    simplifyTolerance?: number;
   } = {
     polygons: false,
     fill: false,
@@ -148,6 +168,7 @@ export const getIsolines = (
       fill?: boolean;
       halo?: boolean;
       waterGap?: boolean;
+      simplifyTolerance?: number;
     }
   ): void {
     if (!isolines[type]) isolines[type] = {};
@@ -159,7 +180,7 @@ export const getIsolines = (
 
     if (options.fill) {
       if (!isolines[type].fill) isolines[type].fill = "";
-      isolines[type].fill = isolines[type].fill + getFillPath(vertices, vertexChain);
+      isolines[type].fill = isolines[type].fill + getFillPath(vertices, vertexChain, options.simplifyTolerance);
     }
 
     if (options.waterGap) {
