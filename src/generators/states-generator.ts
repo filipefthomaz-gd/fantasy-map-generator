@@ -1,8 +1,11 @@
-import { mean, median, sum } from "d3";
+import { mean, median, quadtree, sum } from "d3";
+import { Emblems } from "@/generators/emblems-generator";
+import type { Emblem } from "@/types/emblems";
 import {
+  cellArea,
   each,
-  ensureEl,
   gauss,
+  generateSeed,
   getAdjective,
   getMixedColor,
   getPolesOfInaccessibility,
@@ -15,12 +18,11 @@ import {
   rw,
   trimVowels
 } from "../utils";
+import type { Label } from "./labels-generator";
 import type { Regiment } from "./military-generator";
 
 declare global {
   var States: StatesModule;
-  var cellArea: (i: number) => number;
-  var useSphericalArea: boolean;
 }
 
 export interface State {
@@ -31,7 +33,7 @@ export interface State {
   type: string;
   center: number;
   culture: number;
-  coa: any;
+  coa: Emblem;
   lock?: boolean;
   removed?: boolean;
   pole?: [number, number];
@@ -54,6 +56,8 @@ export interface State {
   salesTax: number;
   pollTax: number;
   treasury: number;
+  label?: Label;
+  note?: string;
 }
 
 interface Campaign {
@@ -76,10 +80,135 @@ const DEFAULT_TAX_BY_FORM: Record<string, TaxBases> = {
 const DEFAULT_TAX: TaxBases = DEFAULT_TAX_BY_FORM.Monarchy;
 
 class StatesModule {
+  regenerate(): { warning?: string; error?: string } {
+    const { warning, error, states } = this.recreate();
+    if (error || !states) return { warning, error };
+
+    pack.states = states;
+    this.expandStates();
+    this.normalize();
+    this.getPoles();
+    this.findNeighbors();
+    this.collectStatistics();
+    this.assignColors();
+    this.generateCampaigns();
+    this.generateDiplomacy();
+    this.defineStateForms();
+    Provinces.regenerate(false);
+    Military.regenerate();
+
+    return { warning, error };
+  }
+
+  private recreate(): { warning?: string; error?: string; states?: State[] } {
+    Math.random = aleaPRNG(generateSeed());
+    const statesCount = options.generation.states.limit;
+    if (!statesCount) return { error: "<i>States Number</i> option value is zero. No counties are generated" };
+
+    const validBurgs = pack.burgs.filter(burg => burg.i && !burg.removed);
+    if (!validBurgs.length) return { error: "There are no burgs to generate states. Please create burgs first" };
+
+    const warning =
+      validBurgs.length < statesCount
+        ? `Not enough burgs to generate ${statesCount} states. Will generate only ${validBurgs.length} states`
+        : undefined;
+    const validStates = pack.states.filter(state => state.i && !state.removed);
+    const lockedStates = validStates.filter(state => state.lock);
+    if (validStates.length && lockedStates.length === validStates.length) {
+      return { error: "Unable to regenerate as all states are locked" };
+    }
+
+    const lockedStateIds = lockedStates.map(state => state.i);
+    const lockedCapitals = lockedStates.map(state => state.capital);
+    for (const burg of validBurgs) {
+      if (!burg.capital || lockedCapitals.includes(burg.i)) continue;
+      burg.capital = 0;
+      Burgs.changeGroup(burg, null);
+    }
+
+    for (const state of pack.states) {
+      if (!state.i || state.removed || state.lock) continue;
+      for (const provinceId of state.provinces ?? []) {
+        if (!pack.provinces[provinceId]) continue;
+        pack.provinces[provinceId].removed = true;
+      }
+    }
+
+    const sortedBurgs = validBurgs
+      .filter(burg => !lockedStateIds.includes(burg.state ?? 0))
+      .map((burg): [typeof burg, number] => [burg, (burg.population ?? 0) * Math.random()])
+      .sort((a, b) => b[1] - a[1])
+      .map(([burg]) => burg);
+    const count = Math.min(statesCount, validBurgs.length) + 1;
+    let spacing = (options.map.graph.width + options.map.graph.height) / 2 / count;
+    const capitalsTree = quadtree<[number, number]>();
+    const newStates: State[] = [{ ...pack.states[0], i: 0, name: pack.states[0].name }];
+
+    for (const state of lockedStates) {
+      const newId = newStates.length;
+      const { x, y } = pack.burgs[state.capital];
+      capitalsTree.add([x, y]);
+      state.provinces?.forEach(provinceId => {
+        if (pack.provinces[provinceId]) pack.provinces[provinceId].state = newId;
+      });
+      state.i = newId;
+      newStates.push(state);
+    }
+
+    for (const cellId of pack.cells.i) {
+      pack.cells.state[cellId] = lockedStateIds.indexOf(pack.cells.state[cellId]) + 1;
+    }
+
+    for (let stateId = newStates.length; stateId < count; stateId++) {
+      let capital = null;
+      for (const burg of sortedBurgs) {
+        if (!capitalsTree.find(burg.x, burg.y, spacing)) {
+          burg.capital = 1;
+          capital = burg;
+          capitalsTree.add([burg.x, burg.y]);
+          Burgs.changeGroup(capital, null);
+          break;
+        }
+        spacing = Math.max(spacing - 1, 1);
+      }
+      if (!capital) break;
+
+      const culture = capital.culture ?? 0;
+      const capitalName = capital.name ?? "";
+      const basename =
+        capitalName.length < 9 && capital.cell % 5 === 0 ? capitalName : Names.getCulture(culture, 3, 6, "");
+      const name = Names.getState(basename, culture);
+      const nomadic = [1, 2, 3, 4].includes(pack.cells.biome[capital.cell]);
+      const type = nomadic
+        ? "Nomadic"
+        : pack.cultures[culture].type === "Nomadic"
+          ? "Generic"
+          : pack.cultures[culture].type;
+      const expansionism = rn(Math.random() * options.generation.states.sizeVariety + 1, 1);
+      const coa = Emblems.generate(capital.coa, 0.3, null, pack.cultures[culture].type);
+      coa.shield = capital.coa?.shield;
+      newStates.push({
+        i: stateId,
+        name,
+        type,
+        capital: capital.i,
+        center: capital.cell,
+        culture,
+        expansionism,
+        coa,
+        salesTax: 0,
+        pollTax: 0,
+        treasury: 0
+      });
+    }
+
+    return { states: newStates, warning };
+  }
+
   private createStates() {
     const states: State[] = [{ i: 0, name: "Neutrals", salesTax: 0, pollTax: 0, treasury: 0 } as State];
     const each5th = each(5);
-    const sizeVariety = (ensureEl("sizeVariety") as HTMLInputElement).valueAsNumber;
+    const sizeVariety = options.generation.states.sizeVariety;
 
     pack.burgs.forEach(burg => {
       if (!burg.i || !burg.capital) return;
@@ -88,8 +217,8 @@ class StatesModule {
       const basename = burg.name!.length < 9 && each5th(burg.cell) ? burg.name! : Names.getCultureShort(burg.culture!);
       const name = Names.getState(basename, burg.culture!);
       const type = pack.cultures[burg.culture!].type;
-      const coa = COA.generate(null, null, null, type);
-      coa.shield = COA.getShield(burg.culture!);
+      const coa = Emblems.generate(null, null, null, type);
+      coa.shield = Emblems.getShield(burg.culture!);
       states.push({
         i: burg.i,
         name,
@@ -110,9 +239,9 @@ class StatesModule {
 
   private getBiomeCost(b: number, biome: number, type: string) {
     if (b === biome) return 10; // tiny penalty for native biome
-    if (type === "Hunting") return biomesData.cost[biome] * 2; // non-native biome penalty for hunters
-    if (type === "Nomadic" && biome > 4 && biome < 10) return biomesData.cost[biome] * 3; // forest biome penalty for nomads
-    return biomesData.cost[biome]; // general non-native biome penalty
+    if (type === "Hunting") return pack.biomes[biome].cost * 2; // non-native biome penalty for hunters
+    if (type === "Nomadic" && biome > 4 && biome < 10) return pack.biomes[biome].cost * 3; // forest biome penalty for nomads
+    return pack.biomes[biome].cost; // general non-native biome penalty
   }
 
   private getHeightCost(f: any, h: number, type: string) {
@@ -141,7 +270,6 @@ class StatesModule {
   }
 
   generate() {
-    TIME && console.time("generateStates");
     pack.states = this.createStates();
     this.expandStates();
     this.normalize();
@@ -150,8 +278,6 @@ class StatesModule {
     this.assignColors();
     this.generateCampaigns();
     this.generateDiplomacy();
-
-    TIME && console.timeEnd("generateStates");
   }
 
   expandStates() {
@@ -163,10 +289,7 @@ class StatesModule {
     const queue = new FlatQueue();
     const cost: number[] = [];
 
-    const globalGrowthRate = (document.getElementById("growthRate") as HTMLInputElement | null)?.valueAsNumber || 1;
-    const statesGrowthRate =
-      (document.getElementById("statesGrowthRate") as HTMLInputElement | null)?.valueAsNumber || 1;
-    const growthRate = (cells.i.length / 2) * globalGrowthRate * statesGrowthRate; // limit cost for state growth
+    const growthRate = (cells.i.length / 2) * options.generation.states.growthRate; // limit cost for state growth
 
     // remove state from all cells except of locked
     for (const cellId of cells.i) {
@@ -332,7 +455,6 @@ class StatesModule {
 
   // calculate states data like area, population etc.
   collectStatistics() {
-    TIME && console.time("collectStatistics");
     const { cells, states } = pack;
 
     states.forEach(s => {
@@ -353,8 +475,6 @@ class StatesModule {
         states[s].burgs!++;
       }
     }
-
-    TIME && console.timeEnd("collectStatistics");
   }
 
   generateCampaign(state: State): Campaign[] {
@@ -373,8 +493,8 @@ class StatesModule {
     return neighbors
       .map((i: number) => {
         const name = i && P(0.8) ? pack.states[i].name : Names.getCultureShort(state.culture);
-        const start = gauss(options.year - 100, 150, 1, options.year - 6);
-        const end = start + gauss(4, 5, 1, options.year - start - 1);
+        const start = gauss(options.map.lore.calendar.year - 100, 150, 1, options.map.lore.calendar.year - 6);
+        const end = start + gauss(4, 5, 1, options.map.lore.calendar.year - start - 1);
         return { name: `${getAdjective(name)} ${rw(wars)}`, start, end, attacker: state.i!, defender: i };
       })
       .sort((a, b) => a.start - b.start);
@@ -489,7 +609,7 @@ class StatesModule {
 
       // start an ongoing war
       const name = `${an}-${trimVowels(dn)}ian War`;
-      const start = options.year - gauss(2, 3, 0, 10);
+      const start = options.map.lore.calendar.year - gauss(2, 3, 0, 10);
       const war = [name, `${an} declared a war on its rival ${dn}`];
       const campaign: Campaign = { name, start, attacker, defender };
       states[attacker].campaigns!.push(campaign);
@@ -581,7 +701,6 @@ class StatesModule {
 
   // select a forms for listed or all valid states
   defineStateForms(list: number[] | null = null) {
-    TIME && console.time("defineStateForms");
     const states = pack.states.filter(s => s.i && !s.removed && !s.lock);
     if (states.length < 1) return;
 
@@ -721,8 +840,6 @@ class StatesModule {
       s.salesTax = taxes.salesTax;
       s.pollTax = taxes.pollTax;
     }
-
-    TIME && console.timeEnd("defineStateForms");
   }
 
   defineTaxRates(state: State) {

@@ -1,9 +1,8 @@
+import { select } from "d3";
+import { tip } from "@/components/tooltips";
 import { ensureEl } from "../utils";
 
 declare global {
-  var declareFont: (font: FontDefinition) => void;
-  var getUsedFonts: (svg: SVGSVGElement) => FontDefinition[];
-  var loadFontsAsDataURI: (fonts: FontDefinition[]) => Promise<FontDefinition[]>;
   var addGoogleFont: (family: string) => Promise<void>;
   var addLocalFont: (family: string) => void;
   var addWebFont: (family: string, src: string) => void;
@@ -268,14 +267,15 @@ window.fonts = [
   }
 ];
 
-window.declareFont = (font: FontDefinition) => {
+/** Register a font so the app can use and export it */
+export function declareFont(font: FontDefinition): void {
   const { family, src, ...rest } = font;
   addFontOption(family);
 
   if (!src) return;
   const fontFace = new FontFace(family, src, { ...rest, display: "block" });
   document.fonts.add(fontFace);
-};
+}
 
 declareDefaultFonts(); // execute once on load
 
@@ -329,7 +329,8 @@ function readBlobAsDataURL(blob: Blob) {
   });
 }
 
-window.loadFontsAsDataURI = async (fonts: FontDefinition[]) => {
+/** Inline the fonts as data URIs so an exported SVG renders without the network */
+export async function loadFontsAsDataURI(fonts: FontDefinition[]): Promise<FontDefinition[]> {
   const promises = fonts.map(async font => {
     const url = font.src?.match(/url\(['"]?(.+?)['"]?\)/)?.[1];
     if (!url) return font;
@@ -341,9 +342,10 @@ window.loadFontsAsDataURI = async (fonts: FontDefinition[]) => {
   });
 
   return await Promise.all(promises);
-};
+}
 
-window.getUsedFonts = (svg: SVGSVGElement) => {
+/** Collect fonts referenced by the map and, when saving, its notes. */
+export function getUsedFonts(svg: SVGSVGElement, legends: string[] = []): FontDefinition[] {
   const usedFontFamilies = new Set();
 
   const labelGroups = svg.querySelectorAll("#labels g");
@@ -352,16 +354,27 @@ window.getUsedFonts = (svg: SVGSVGElement) => {
     if (font) usedFontFamilies.add(font);
   }
 
-  const provinceFont = provs.attr("font-family");
+  const provinceFont = select("#provs").attr("font-family");
   if (provinceFont) usedFontFamilies.add(provinceFont);
 
   const legend = svg.querySelector("#legend");
   const legendFont = legend?.getAttribute("font-family");
   if (legendFont) usedFontFamilies.add(legendFont);
 
+  for (const legend of legends) {
+    const template = document.createElement("template");
+    template.innerHTML = legend;
+    for (const el of template.content.querySelectorAll<HTMLElement>("[style], font[face]")) {
+      const family = el.style.fontFamily || el.getAttribute("face") || "";
+      for (const match of family.matchAll(/"([^"]+)"|'([^']+)'|([^,]+)/g)) {
+        usedFontFamilies.add((match[1] || match[2] || match[3]).trim());
+      }
+    }
+  }
+
   const usedFonts = fonts.filter(font => usedFontFamilies.has(font.family));
   return usedFonts;
-};
+}
 
 window.addGoogleFont = async (family: string) => {
   const fontRanges = await fetchGoogleFont(family);

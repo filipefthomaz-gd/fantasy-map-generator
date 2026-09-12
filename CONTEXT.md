@@ -19,7 +19,8 @@
 - `src/types/`: Shared TypeScript interfaces and domain models.
 - `src/utils/`: Generic helper functions.
 - `public/`: Static assets and NON-MIGRATED JS Code in `public/modules`. `public/libs/` holds vendored third-party scripts for legacy code only — new `src/` code imports deps from npm (no `src/libs/`).
-- `docs/`: Domain and architectural documentation. See `docs/architecture/architecture.md` "Project Structure" for the full layout and a "where does my file go?" guide.
+- `electron/`: Main process, preload script and self-update of the desktop app; the renderer is the same `src/` build, served from the `app://` scheme.
+- `docs/`: Domain, architectural documentation and user-facing wiki.
 - `src/index.html`: **CAUTION**: Currently a 9K-line monolith containing the entire UI structure, SVG `<defs>`, and CSS filters.
 - `tests/e2e/`: Playwright end-to-end tests. Never automatically run Playwright tests when developing.
 
@@ -36,8 +37,9 @@
 - **Language**: TypeScript is mandatory for all new files.
 - **Linting and formatting**: Enforced via Biome (`biome.json`).
 - **Style**: Double quotes, no trailing commas, 120 line width, semicolons required.
-- **Typing**: Use explicit TypeScript interfaces for all shared domain objects. `any` should be avoided.
-- **Imports**: `@/*` aliases `src/*` (set in `vite.config.ts` + `tsconfig.json`). Prefer it over deep `../../` relative paths; keep sibling imports relative.
+- **Typing**: Use explicit TypeScript interfaces for all shared domain objects, `any` is prohibited.
+- **Comments**: Reduced. Don't repeat information that is in docs. Prefer one-liners or no comments.
+- **Imports**: Mandatory `@/*` aliases `src/*` over deep `../../` relative paths; keep sibling imports relative.
 
 # Workflow Rules
 
@@ -46,6 +48,7 @@
 - **Lint**: `npm run lint`
 - **Unit Tests**: `npm run test` (Vitest)
 - **E2E Tests**: `npm run test:e2e` (Playwright)
+- **Desktop App**: `npm run electron` (run in Electron with hot reload), `npm run electron dist` (installers into `release/`)
 - **CI/CD**: GitHub Actions enforce linting, building, and playwright tests on PRs.
 
 # AI Agent Instructions
@@ -61,7 +64,7 @@
 - **Pack**: The aggregate world state (contains `burgs`, `states`, `cultures`, etc.).
 - **Cell**: The smallest indivisible unit of the map.
 - **Burg**: A settlement. Grouped into `States`.
-- **Treasury & Taxes**: States hold `state.treasury` accumulated by `States.collectTaxes()` from per-deal `deal.tax` (sales tax) plus `state.pollTax × (rural + urban)`. Rates are seeded from `state.form` and jittered per state. Neutrals collect nothing. Details in `docs/domain/taxes.md`.
+- **Label**: Text attached to a State, Burg, or user-defined path. Labels select typography from a shared Label Group.
 - **Invariants**: Saving a `.map` file MUST preserve the exact world state so it can be reloaded identically.
 
 # Known Sharp Edges
@@ -76,6 +79,7 @@
 
 # Code Style Rules
 
+- Files MUST be readable from top to bottom.
 - Use concise and descriptive variable names, don't use unusual abbreviations.
 - Prefer laconic but clear code.
 - Save space, I like my code to be compact.

@@ -1,43 +1,37 @@
-import { pointer, select } from "d3";
+import { select } from "d3";
+import { closeDialogs, destroyDialog } from "@/components/dialog/dialog-helpers";
+import { Layers } from "@/components/layers";
+import { stopMapPlacement } from "@/components/map-placement";
+import { clearMainTip, tip } from "@/components/tooltips";
+import { applyDefaultViewboxEvents } from "@/components/viewbox-events";
 import { Controllers } from "@/controllers";
 import type { Route } from "@/generators/routes-generator";
-import { ensureEl, getPackPolygon, rn } from "../utils";
+import { setTempRoute } from "@/renderers/draw-routes";
+import { ensureEl, getPointer, rn } from "../utils";
 
 let creatorPoints: number[][] = [];
 
-const DIALOG_HTML = /* html */ `
-  <div>Click on map to add/remove route points</div>
-  <div id="routeCreatorBody" class="table" style="margin: 0.3em 0"></div>
-  <div id="routeCreatorBottom">
-    <button id="routeCreatorComplete" data-tip="Complete route creation" class="icon-check"></button>
-    <button id="routeCreatorCancel" data-tip="Cancel the creation" class="icon-cancel"></button>
-    <div style="display: inline-block">
-      Group:
-      <select id="routeCreatorGroupSelect"></select>
-      <span id="routeCreatorGroupEdit" data-tip="Edit route groups" class="icon-pencil pointer"></span>
-    </div>
-  </div>`;
+let isCellsLayerForced = false; // the cells layer is turned on for the editing mode
 
 function open(defaultGroup?: string): void {
   if (customization) return;
+  stopMapPlacement();
   closeDialogs();
-  if (!layerIsOn("toggleRoutes")) toggleRoutes();
+  Layers.show("routes");
 
-  ensureEl("toggleCells").dataset.forced = String(+!layerIsOn("toggleCells"));
-  if (!layerIsOn("toggleCells")) toggleCells();
+  isCellsLayerForced = !Layers.isOn("cells");
+  Layers.show("cells");
 
   tip("Click to add route point", true);
-  debug.append("g").attr("id", "controlCells");
-  debug.append("g").attr("id", "controlPoints");
+  select("#debug").append("g").attr("id", "controlCells");
+  select("#debug").append("g").attr("id", "controlPoints");
   select<SVGElement, unknown>("#viewbox").style("cursor", "crosshair").on("click", onClick);
 
   creatorPoints = [];
-  ensureEl("routeCreator").innerHTML = DIALOG_HTML;
-
-  ensureStandardRouteGroups();
+  renderDialog();
 
   // update route groups
-  ensureEl("routeCreatorGroupSelect").innerHTML = routes
+  ensureEl("routeCreatorGroupSelect").innerHTML = select("#routes")
     .selectAll<SVGGElement, unknown>("g")
     .nodes()
     .map(el => {
@@ -45,13 +39,6 @@ function open(defaultGroup?: string): void {
       return `<option value="${el.id}" ${el.id === selected ? "selected" : ""}>${el.id}</option>`;
     })
     .join("");
-
-  // add listeners — dropped together with the dialog HTML on close
-  ensureEl("routeCreatorGroupSelect").on("change", redrawCreatorRoute);
-  ensureEl("routeCreatorGroupEdit").on("click", openRouteGroupsEditor);
-  ensureEl("routeCreatorComplete").on("click", completeCreation);
-  ensureEl("routeCreatorCancel").on("click", cancelCreation);
-  ensureEl("routeCreatorBody").on("click", onBodyClick);
 
   $("#routeCreator").dialog({
     title: "Create Route",
@@ -61,47 +48,30 @@ function open(defaultGroup?: string): void {
   });
 }
 
-// ensure standard route groups exist in the DOM (may be absent on loaded saves)
-const STANDARD_ROUTE_GROUPS: Record<string, Record<string, string | number>> = {
-  railways: {
-    stroke: "#222222",
-    "stroke-width": 0.6,
-    "stroke-dasharray": "3 1",
-    "stroke-linecap": "square",
-    fill: "none",
-    opacity: 0.7
-  },
-  airways: {
-    stroke: "#6688cc",
-    "stroke-width": 0.5,
-    "stroke-dasharray": "1 4",
-    "stroke-linecap": "round",
-    fill: "none",
-    opacity: 0.7
-  }
-};
+function renderDialog(): void {
+  destroyDialog("routeCreator");
 
-function ensureStandardRouteGroups(): void {
-  for (const [id, attrs] of Object.entries(STANDARD_ROUTE_GROUPS)) {
-    if (routes.select(`#${id}`).empty()) {
-      const g = routes.append("g").attr("id", id);
-      Object.entries(attrs).forEach(([k, v]) => {
-        g.attr(k, v);
-      });
-    }
-  }
-}
+  const html = /* html */ `<div id="routeCreator" class="dialog">
+    <div>Click on map to add/remove route points</div>
+    <div id="routeCreatorBody" class="table" style="margin: 0.3em 0"></div>
+    <div id="routeCreatorBottom">
+      <button id="routeCreatorComplete" data-tip="Complete route creation" class="icon-check"></button>
+      <button id="routeCreatorCancel" data-tip="Cancel the creation" class="icon-cancel"></button>
+      <div style="display: inline-block">
+        Group:
+        <select id="routeCreatorGroupSelect"></select>
+        <span id="routeCreatorGroupEdit" data-tip="Edit route groups" class="icon-pencil pointer"></span>
+      </div>
+    </div>
+  </div>`;
+  ensureEl("dialogs").insertAdjacentHTML("beforeend", html);
 
-function redrawCreatorRoute(): void {
-  drawRoute(creatorPoints);
-}
-
-function openRouteGroupsEditor(): void {
-  void Controllers.RouteGroupsEditor.open();
-}
-
-function cancelCreation(): void {
-  $("#routeCreator").dialog("close");
+  // add listeners — dropped together with the dialog HTML on close
+  ensureEl("routeCreatorGroupSelect").addEventListener("change", () => drawRoute(creatorPoints));
+  ensureEl("routeCreatorGroupEdit").addEventListener("click", () => void Controllers.RouteGroupsEditor.open());
+  ensureEl("routeCreatorComplete").addEventListener("click", completeCreation);
+  ensureEl("routeCreatorCancel").addEventListener("click", () => $("#routeCreator").dialog("close"));
+  ensureEl("routeCreatorBody").addEventListener("click", onBodyClick);
 }
 
 function onBodyClick(ev: Event): void {
@@ -110,8 +80,8 @@ function onBodyClick(ev: Event): void {
 }
 
 function onClick(this: any, event: any): void {
-  const [x, y] = pointer(event, this);
-  const cellId = findCell(x, y);
+  const [x, y] = getPointer(event, this);
+  const cellId = Pack.findCell(x, y);
   const point = [rn(x, 2), rn(y, 2), cellId!];
   creatorPoints.push(point);
 
@@ -135,15 +105,15 @@ function removePoint(pointString: string): void {
 }
 
 function drawRoute(points: number[][]): void {
-  debug
+  select("#debug")
     .select("#controlCells")
     .selectAll("polygon")
     .data(points)
     .join("polygon")
-    .attr("points", (p: number[]) => getPackPolygon(p[2], pack))
+    .attr("points", (p: number[]) => String(Pack.getPolygon(p[2])))
     .attr("class", "current");
 
-  debug
+  select("#debug")
     .select("#controlPoints")
     .selectAll("circle")
     .data(points)
@@ -153,9 +123,7 @@ function drawRoute(points: number[][]): void {
     .attr("r", 0.6);
 
   const group = ensureEl<HTMLSelectElement>("routeCreatorGroupSelect").value;
-
-  routes.select("#routeTemp").remove();
-  routes.select(`#${group}`).append("path").attr("d", Routes.getPath({ group, points })).attr("id", "routeTemp");
+  setTempRoute({ group, points });
 }
 
 function completeCreation(): void {
@@ -188,23 +156,23 @@ function completeCreation(): void {
     }
   }
 
-  routes.select("#routeTemp").attr("id", `route${routeId}`);
+  setTempRoute(null);
+  Layers.draw("routes");
   void Controllers.RouteEditor.open(`route${routeId}`);
 }
 
 function closeRouteCreator(): void {
-  debug.select("#controlCells").remove();
-  debug.select("#controlPoints").remove();
-  routes.select("#routeTemp").remove();
+  select("#debug").select("#controlCells").remove();
+  select("#debug").select("#controlPoints").remove();
+  setTempRoute(null);
 
-  restoreDefaultEvents();
+  applyDefaultViewboxEvents();
   clearMainTip();
 
-  const forced = +ensureEl("toggleCells").dataset.forced!;
-  ensureEl("toggleCells").dataset.forced = "0";
-  if (forced && layerIsOn("toggleCells")) toggleCells();
+  if (isCellsLayerForced) Layers.hide("cells");
+  isCellsLayerForced = false;
 
-  ensureEl("routeCreator").innerHTML = "";
+  destroyDialog("routeCreator");
 }
 
 export const RouteCreator = { open };

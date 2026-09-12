@@ -9,7 +9,7 @@
       "@/*": ["src/*"]
     },
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+    "types": ["vite/client", "node"],
     "skipLibCheck": true,
     "isolatedModules": true,
 
@@ -26,6 +26,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
+    // "noUncheckedIndexedAccess": true, // TODO: turn on in the next version
   },
   "include": ["src"],
   "exclude": ["src/e2e"]

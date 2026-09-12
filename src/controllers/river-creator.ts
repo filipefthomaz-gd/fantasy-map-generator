@@ -1,36 +1,30 @@
-import { pointer, select } from "d3";
+import { select } from "d3";
+import { closeDialogs, destroyDialog } from "@/components/dialog/dialog-helpers";
+import { Layers } from "@/components/layers";
+import { clearMainTip, tip } from "@/components/tooltips";
+import { applyDefaultViewboxEvents } from "@/components/viewbox-events";
 import { Controllers } from "@/controllers";
 import type { Point } from "@/generators/voronoi";
-import { ensureEl, getPackPolygon, last, rn } from "../utils";
+import { ensureEl, getPointer, last, rn } from "../utils";
 
 let creatorCells: number[] = [];
 
-const DIALOG_HTML = /* html */ `
-  <div id="riverCreatorBody" class="table"></div>
-  <div id="riverCreatorBottom">
-    <button id="riverCreatorComplete" data-tip="Complete river creation" class="icon-check"></button>
-    <button id="riverCreatorCancel" data-tip="Cancel the creation" class="icon-cancel"></button>
-  </div>`;
+let isCellsLayerForced = false; // the cells layer is turned on for the editing mode
 
 function open(): void {
   if (customization) return;
   closeDialogs();
-  if (!layerIsOn("toggleRivers")) toggleRivers();
+  Layers.show("rivers");
 
-  ensureEl("toggleCells").dataset.forced = String(+!layerIsOn("toggleCells"));
-  if (!layerIsOn("toggleCells")) toggleCells();
+  isCellsLayerForced = !Layers.isOn("cells");
+  Layers.show("cells");
 
   tip("Click to add river point, click again to remove", true);
-  debug.append("g").attr("id", "controlCells");
+  select("#debug").append("g").attr("id", "controlCells");
   select<SVGElement, unknown>("#viewbox").style("cursor", "crosshair").on("click", onCellClick);
 
   creatorCells = [];
-  ensureEl("riverCreator").innerHTML = DIALOG_HTML;
-
-  // add listeners — dropped together with the dialog HTML on close
-  ensureEl("riverCreatorComplete").on("click", addRiver);
-  ensureEl("riverCreatorCancel").on("click", cancelCreation);
-  ensureEl("riverCreatorBody").on("click", onBodyClick);
+  renderDialog();
 
   $("#riverCreator").dialog({
     title: "Create River",
@@ -38,6 +32,24 @@ function open(): void {
     position: { my: "left top", at: "left+10 top+10", of: "#map" },
     close: closeRiverCreator
   });
+}
+
+function renderDialog(): void {
+  destroyDialog("riverCreator");
+
+  const html = /* html */ `<div id="riverCreator" class="dialog">
+    <div id="riverCreatorBody" class="table"></div>
+    <div id="riverCreatorBottom">
+      <button id="riverCreatorComplete" data-tip="Complete river creation" class="icon-check"></button>
+      <button id="riverCreatorCancel" data-tip="Cancel the creation" class="icon-cancel"></button>
+    </div>
+  </div>`;
+  ensureEl("dialogs").insertAdjacentHTML("beforeend", html);
+
+  // add listeners — dropped together with the dialog HTML on close
+  ensureEl("riverCreatorComplete").addEventListener("click", addRiver);
+  ensureEl("riverCreatorCancel").addEventListener("click", cancelCreation);
+  ensureEl("riverCreatorBody").addEventListener("click", onBodyClick);
 }
 
 function cancelCreation(): void {
@@ -53,7 +65,7 @@ function onBodyClick(ev: Event): void {
 }
 
 function onCellClick(this: any, event: any): void {
-  const cell = findCell(...(pointer(event, this) as [number, number]))!;
+  const cell = Pack.findCell(...(getPointer(event, this) as [number, number]))!;
 
   if (creatorCells.includes(cell)) removeCell(cell);
   else addCell(cell);
@@ -80,12 +92,12 @@ function removeCell(cell: number): void {
 }
 
 function drawCells(cells: number[]): void {
-  debug
+  select("#debug")
     .select("#controlCells")
     .selectAll(`polygon`)
     .data(cells)
     .join("polygon")
-    .attr("points", (d: number) => getPackPolygon(d, pack))
+    .attr("points", (d: number) => String(Pack.getPolygon(d)))
     .attr("class", "current");
 }
 
@@ -107,7 +119,7 @@ function addRiver(): void {
   const source = riverCells[0];
   const mouth = parent === riverId ? last(riverCells) : riverCells[riverCells.length - 2];
   const sourceWidth = Rivers.getSourceWidth(cells.fl[source]);
-  const defaultWidthFactor = rn(1 / (+pointsInput.dataset.cells! / 10000) ** 0.25, 2);
+  const defaultWidthFactor = rn(1 / (options.map.graph.points / 10000) ** 0.25, 2);
   const widthFactor = 1.2 * defaultWidthFactor;
 
   const meanderedPoints = Rivers.addMeandering(riverCells);
@@ -140,27 +152,19 @@ function addRiver(): void {
     name,
     type: "River"
   });
-  const id = `river${riverId}`;
-
-  viewbox
-    .select("#rivers")
-    .append("path")
-    .attr("id", id)
-    .attr("d", Rivers.getRiverPath(meanderedPoints, widthFactor, sourceWidth));
-
-  void Controllers.RiverEditor.open(id);
+  Layers.draw("rivers");
+  void Controllers.RiverEditor.open(`river${riverId}`);
 }
 
 function closeRiverCreator(): void {
-  debug.select("#controlCells").remove();
-  restoreDefaultEvents();
+  select("#debug").select("#controlCells").remove();
+  applyDefaultViewboxEvents();
   clearMainTip();
 
-  const forced = +ensureEl("toggleCells").dataset.forced!;
-  ensureEl("toggleCells").dataset.forced = "0";
-  if (forced && layerIsOn("toggleCells")) toggleCells();
+  if (isCellsLayerForced) Layers.hide("cells");
+  isCellsLayerForced = false;
 
-  ensureEl("riverCreator").innerHTML = "";
+  destroyDialog("riverCreator");
 }
 
 export const RiverCreator = { open };

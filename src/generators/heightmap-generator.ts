@@ -1,6 +1,9 @@
 import Alea from "alea";
 import { range as d3Range, leastIndex, mean } from "d3";
-import { createTypedArray, ensureEl, findGridCell, getNumberInRange, lim, minmax, P, rand } from "../utils";
+import type { MapData } from "@/components/options-schema";
+import { heightmapTemplates } from "@/data/heightmap-templates";
+import type { GridGraph } from "@/types/GridGraph";
+import { getNumberInRange, lim, minmax, P, rand } from "../utils";
 
 declare global {
   var HeightmapGenerator: HeightmapModule;
@@ -13,6 +16,8 @@ class HeightmapModule {
   heights: Uint8Array | null = null;
   blobPower: number = 0;
   linePower: number = 0;
+  private width = 0;
+  private height = 0;
 
   private clearData() {
     this.heights = null;
@@ -69,14 +74,11 @@ class HeightmapModule {
     return rand(min * length, max * length);
   }
 
-  setGraph(graph: any) {
-    const { cellsDesired, cells, points } = graph;
-    this.heights = cells.h
-      ? Uint8Array.from(cells.h)
-      : (createTypedArray({
-          maxValue: 100,
-          length: points.length
-        }) as Uint8Array);
+  setGraph(graph: GridGraph, config: MapData["graph"] = options.map.graph) {
+    const cellsDesired = config.points;
+    this.width = config.width;
+    this.height = config.height;
+    this.heights = Uint8Array.from(graph.cells.h);
     this.blobPower = this.getBlobPower(cellsDesired);
     this.linePower = this.getLinePower(cellsDesired);
     this.grid = graph;
@@ -91,10 +93,10 @@ class HeightmapModule {
       const h = lim(getNumberInRange(height));
 
       do {
-        const x = this.getPointInRange(rangeX, graphWidth);
-        const y = this.getPointInRange(rangeY, graphHeight);
+        const x = this.getPointInRange(rangeX, this.width);
+        const y = this.getPointInRange(rangeY, this.height);
         if (x === undefined || y === undefined) return;
-        start = findGridCell(x, y, this.grid);
+        start = Grid.findCell(x, y, this.grid);
         limit++;
       } while (this.heights[start] + h > 90 && limit < 50);
       change[start] = h;
@@ -127,10 +129,10 @@ class HeightmapModule {
       let h = lim(getNumberInRange(height));
 
       do {
-        const x = this.getPointInRange(rangeX, graphWidth);
-        const y = this.getPointInRange(rangeY, graphHeight);
+        const x = this.getPointInRange(rangeX, this.width);
+        const y = this.getPointInRange(rangeY, this.height);
         if (x === undefined || y === undefined) return;
-        start = findGridCell(x, y, this.grid);
+        start = Grid.findCell(x, y, this.grid);
         limit++;
       } while (this.heights[start] < 20 && limit < 50);
 
@@ -161,7 +163,8 @@ class HeightmapModule {
     rangeX: string,
     rangeY: string,
     startCellId?: number,
-    endCellId?: number
+    endCellId?: number,
+    randomness = 0.15
   ): void {
     if (!this.heights || !this.grid) return;
 
@@ -179,7 +182,8 @@ class HeightmapModule {
           this.grid.cells.c[cur].forEach((e: number) => {
             if (used[e]) return;
             let diff = (p[end][0] - p[e][0]) ** 2 + (p[end][1] - p[e][1]) ** 2;
-            if (Math.random() > 0.85) diff = diff / 2;
+            // compare against the top of the [0,1) range to keep seeded generation identical to the legacy `> 0.85`/`> 0.8` checks
+            if (Math.random() > 1 - randomness) diff = diff / 2;
             if (diff < min) {
               min = diff;
               cur = e;
@@ -198,8 +202,8 @@ class HeightmapModule {
 
       if (rangeX && rangeY) {
         // find start and end points
-        const startX = this.getPointInRange(rangeX, graphWidth) as number;
-        const startY = this.getPointInRange(rangeY, graphHeight) as number;
+        const startX = this.getPointInRange(rangeX, this.width) as number;
+        const startY = this.getPointInRange(rangeY, this.height) as number;
 
         let dist = 0;
         let limit = 0;
@@ -207,14 +211,14 @@ class HeightmapModule {
         let endX: number;
 
         do {
-          endX = Math.random() * graphWidth * 0.8 + graphWidth * 0.1;
-          endY = Math.random() * graphHeight * 0.7 + graphHeight * 0.15;
+          endX = Math.random() * this.width * 0.8 + this.width * 0.1;
+          endY = Math.random() * this.height * 0.7 + this.height * 0.15;
           dist = Math.abs(endY - startY) + Math.abs(endX - startX);
           limit++;
-        } while ((dist < graphWidth / 8 || dist > graphWidth / 3) && limit < 50);
+        } while ((dist < this.width / 8 || dist > this.width / 3) && limit < 50);
 
-        startCellId = findGridCell(startX, startY, this.grid);
-        endCellId = findGridCell(endX, endY, this.grid);
+        startCellId = Grid.findCell(startX, startY, this.grid);
+        endCellId = Grid.findCell(endX, endY, this.grid);
       }
 
       const range = getRange(startCellId as number, endCellId as number);
@@ -270,7 +274,8 @@ class HeightmapModule {
     rangeX: string,
     rangeY: string,
     startCellId?: number,
-    endCellId?: number
+    endCellId?: number,
+    randomness = 0.2
   ): void {
     const addOneTrough = () => {
       if (!this.heights || !this.grid) return;
@@ -286,7 +291,8 @@ class HeightmapModule {
           this.grid.cells.c[cur].forEach((e: number) => {
             if (used[e]) return;
             let diff = (p[end][0] - p[e][0]) ** 2 + (p[end][1] - p[e][1]) ** 2;
-            if (Math.random() > 0.8) diff = diff / 2;
+            // compare against the top of the [0,1) range to keep seeded generation identical to the legacy `> 0.85`/`> 0.8` checks
+            if (Math.random() > 1 - randomness) diff = diff / 2;
             if (diff < min) {
               min = diff;
               cur = e;
@@ -312,21 +318,21 @@ class HeightmapModule {
         let endX: number;
         let endY: number;
         do {
-          startX = this.getPointInRange(rangeX, graphWidth) as number;
-          startY = this.getPointInRange(rangeY, graphHeight) as number;
-          startCellId = findGridCell(startX, startY, this.grid);
+          startX = this.getPointInRange(rangeX, this.width) as number;
+          startY = this.getPointInRange(rangeY, this.height) as number;
+          startCellId = Grid.findCell(startX, startY, this.grid);
           limit++;
         } while (this.heights[startCellId] < 20 && limit < 50);
 
         limit = 0;
         do {
-          endX = Math.random() * graphWidth * 0.8 + graphWidth * 0.1;
-          endY = Math.random() * graphHeight * 0.7 + graphHeight * 0.15;
+          endX = Math.random() * this.width * 0.8 + this.width * 0.1;
+          endY = Math.random() * this.height * 0.7 + this.height * 0.15;
           dist = Math.abs(endY - startY) + Math.abs(endX - startX);
           limit++;
-        } while ((dist < graphWidth / 8 || dist > graphWidth / 2) && limit < 50);
+        } while ((dist < this.width / 8 || dist > this.width / 2) && limit < 50);
 
-        endCellId = findGridCell(endX, endY, this.grid);
+        endCellId = Grid.findCell(endX, endY, this.grid);
       }
 
       const range = getRange(startCellId as number, endCellId as number);
@@ -382,17 +388,17 @@ class HeightmapModule {
     if (desiredWidth < 1 && P(desiredWidth)) return;
     const used = new Uint8Array(this.heights.length);
     const vert = direction === "vertical";
-    const startX = vert ? Math.floor(Math.random() * graphWidth * 0.4 + graphWidth * 0.3) : 5;
-    const startY = vert ? 5 : Math.floor(Math.random() * graphHeight * 0.4 + graphHeight * 0.3);
+    const startX = vert ? Math.floor(Math.random() * this.width * 0.4 + this.width * 0.3) : 5;
+    const startY = vert ? 5 : Math.floor(Math.random() * this.height * 0.4 + this.height * 0.3);
     const endX = vert
-      ? Math.floor(graphWidth - startX - graphWidth * 0.1 + Math.random() * graphWidth * 0.2)
-      : graphWidth - 5;
+      ? Math.floor(this.width - startX - this.width * 0.1 + Math.random() * this.width * 0.2)
+      : this.width - 5;
     const endY = vert
-      ? graphHeight - 5
-      : Math.floor(graphHeight - startY - graphHeight * 0.1 + Math.random() * graphHeight * 0.2);
+      ? this.height - 5
+      : Math.floor(this.height - startY - this.height * 0.1 + Math.random() * this.height * 0.2);
 
-    const start = findGridCell(startX, startY, this.grid);
-    const end = findGridCell(endX, endY, this.grid);
+    const start = Grid.findCell(startX, startY, this.grid);
+    const end = Grid.findCell(endX, endY, this.grid);
 
     const getRange = (cur: number, end: number) => {
       const range = [];
@@ -468,8 +474,8 @@ class HeightmapModule {
 
     this.heights = this.heights.map((h, i) => {
       const [x, y] = this.grid.points[i];
-      const nx = (2 * x) / graphWidth - 1; // [-1, 1], 0 is center
-      const ny = (2 * y) / graphHeight - 1; // [-1, 1], 0 is center
+      const nx = (2 * x) / this.width - 1; // [-1, 1], 0 is center
+      const ny = (2 * y) / this.height - 1; // [-1, 1], 0 is center
       let distance = (1 - nx ** 2) * (1 - ny ** 2); // 1 is center, 0 is edge
       if (power < 0) distance = 1 - distance; // inverted, 0 is center, 1 is edge
       const masked = h * distance;
@@ -541,25 +547,28 @@ class HeightmapModule {
     }
   }
 
-  async generate(graph: any): Promise<Uint8Array> {
-    TIME && console.time("defineHeightmap");
-    const id = (ensureEl("templateInput")! as HTMLInputElement).value;
-    Math.random = Alea(seed);
-    const isTemplate = id in heightmapTemplates;
-
-    const heights = isTemplate ? this.fromTemplate(graph, id) : await this.fromPrecreated(graph, id);
-    TIME && console.timeEnd("defineHeightmap");
-
-    this.clearData();
-    return heights as Uint8Array;
+  /** heightmap template or precreated heightmap selected in the options */
+  getSelectedId(): string {
+    return options.generation.template;
   }
 
-  fromTemplate(graph: any, id: string): Uint8Array | null {
+  /** build the heightmap from the selected template or image and store it as the graph cell heights */
+  async generate(graph: GridGraph = grid, id: string = this.getSelectedId()): Promise<Uint8Array> {
+    Math.random = Alea(options.map.seed); // reset PRNG
+    const isTemplate = id in heightmapTemplates;
+    const heights = isTemplate ? this.fromTemplate(graph, id) : await this.fromPrecreated(graph, id);
+
+    this.clearData();
+    graph.cells.h = heights;
+    return heights;
+  }
+
+  fromTemplate(graph: GridGraph, id: string, config: MapData["graph"] = options.map.graph): Uint8Array {
     const templateString = heightmapTemplates[id]?.template || "";
     const steps = templateString.split("\n");
 
     if (!steps.length) throw new Error(`Heightmap template: no steps. Template: ${id}. Steps: ${steps}`);
-    this.setGraph(graph);
+    this.setGraph(graph, config);
 
     for (const step of steps) {
       const elements = step.trim().split(" ");
@@ -567,7 +576,7 @@ class HeightmapModule {
       this.addStep(...(elements as [Tool, string, string, string, string]));
     }
 
-    return this.heights;
+    return this.heights!;
   }
 
   private getHeightsFromImageData(imageData: Uint8ClampedArray): void {
@@ -579,7 +588,7 @@ class HeightmapModule {
     }
   }
 
-  fromPrecreated(graph: any, id: string): Promise<Uint8Array> {
+  fromPrecreated(graph: GridGraph, id: string, config: MapData["graph"] = options.map.graph): Promise<Uint8Array> {
     return new Promise(resolve => {
       // create canvas where 1px corresponds to a cell
       const canvas = document.createElement("canvas");
@@ -598,7 +607,7 @@ class HeightmapModule {
         this.heights = this.heights || new Uint8Array(cellsX * cellsY);
         ctx.drawImage(img, 0, 0, cellsX, cellsY);
         const imageData = ctx.getImageData(0, 0, cellsX, cellsY);
-        this.setGraph(graph);
+        this.setGraph(graph, config);
         this.getHeightsFromImageData(imageData.data);
         canvas.remove();
         img.remove();

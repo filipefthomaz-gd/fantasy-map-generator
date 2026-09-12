@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForMap } from "./wait-for-map";
 
 test.describe("Lakes layer", () => {
   test.beforeEach(async ({ context, page }) => {
@@ -13,9 +14,7 @@ test.describe("Lakes layer", () => {
     await page.goto("/?seed=test-seed&width=1280&height=720");
 
     // Wait for map generation to complete
-    await page.waitForFunction(() => (window as any).mapId !== undefined, {
-      timeout: 60000,
-    });
+    await waitForMap(page);
 
     // Wait for any post-generation rendering to settle
     await page.waitForTimeout(500);
@@ -33,11 +32,11 @@ test.describe("Lakes layer", () => {
     await expect(lakes).toBeVisible();
 
     // Click the toggle button to hide; wait for jQuery fadeOut to complete
-    await page.locator("#toggleLakes").click();
+    await page.locator("#mapLayers > li[data-layer='lakes']").click();
     await expect(lakes).toBeHidden();
 
     // Click again to show; wait for jQuery fadeIn to complete
-    await page.locator("#toggleLakes").click();
+    await page.locator("#mapLayers > li[data-layer='lakes']").click();
     await expect(lakes).toBeVisible();
   });
 
@@ -64,8 +63,8 @@ test.describe("Lakes layer", () => {
         document.querySelectorAll("#mapLayers > li")
       ) as HTMLElement[];
       return [
-        items.findIndex((li) => li.id === "toggleLakes"),
-        items.findIndex((li) => li.id === "toggleHeight"),
+        items.findIndex((li) => li.dataset.layer === "lakes"),
+        items.findIndex((li) => li.dataset.layer === "heightmap"),
       ];
     });
 
@@ -85,11 +84,10 @@ test.describe("Lakes layer", () => {
     expect(initialOrder.terrs).toBeGreaterThanOrEqual(0);
     expect(initialOrder.lakes).toBeGreaterThan(initialOrder.terrs);
 
-    // Simulate what moveLayer does when the user drags Lakes above Heightmap:
-    // panel item "toggleLakes" is now before "toggleHeight" → el.insertBefore(#terrs)
+    // Simulate the drag of Lakes above Heightmap in the panel
     await page.evaluate(() => {
-      const $ = (window as any).$;
-      $("#lakes").insertBefore($("#terrs"));
+      const Layers = (window as any).Layers;
+      Layers.move("lakes", "heightmap");
     });
 
     // After move: #lakes should be before #terrs in SVG → renders behind heightmap
@@ -99,5 +97,45 @@ test.describe("Lakes layer", () => {
       return { lakes: ids.indexOf("lakes"), terrs: ids.indexOf("terrs") };
     });
     expect(newOrder.lakes).toBeLessThan(newOrder.terrs);
+  });
+
+  test("a lake moved to a custom group keeps its subtype and stays there after a redraw", async ({
+    page,
+  }) => {
+    const moved = await page.evaluate(async () => {
+      const win = window as any;
+      const use = document.querySelector("#lakes use") as SVGUseElement;
+      const featureId = Number(use.dataset.f);
+      const subtypeBefore = win.pack.features[featureId].subtype;
+
+      await win.Controllers.LakesEditor.open(use);
+
+      // create a custom group for the lake, as the editor's "+" flow does
+      const nameInput = document.getElementById("lakeGroupName") as HTMLInputElement;
+      nameInput.value = "my_lakes";
+      nameInput.dispatchEvent(new Event("change"));
+
+      const feature = win.pack.features[featureId];
+      return {
+        featureId,
+        subtypeBefore,
+        subtypeAfter: feature.subtype,
+        group: feature.group,
+        parentAfterMove: use.parentElement?.id,
+      };
+    });
+
+    expect(moved.group).toBe("my_lakes");
+    expect(moved.subtypeAfter).toBe(moved.subtypeBefore); // the lake subtype is not overwritten by the group
+    expect(moved.parentAfterMove).toBe("my_lakes");
+
+    // the placement has to survive a redraw of the layer, which is what happens on load
+    const parentAfterRedraw = await page.evaluate(featureId => {
+      const win = window as any;
+      win.Layers.draw("lakes");
+      return document.querySelector(`#lakes use[data-f="${featureId}"]`)?.parentElement?.id;
+    }, moved.featureId);
+
+    expect(parentAfterRedraw).toBe("my_lakes");
   });
 });

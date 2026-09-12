@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { waitForMap } from "./wait-for-map";
 
 test.describe("Burgs.add", () => {
   test.beforeEach(async ({ context, page }) => {
@@ -14,10 +15,7 @@ test.describe("Burgs.add", () => {
     await page.goto("/?seed=test-burgs&width=1280&height=720");
 
     // Wait for map generation to complete
-    await page.waitForFunction(
-      () => (window as any).mapId !== undefined,
-      { timeout: 60000 }
-    );
+    await waitForMap(page);
 
     // Additional wait for any rendering/animations to settle
     await page.waitForTimeout(500);
@@ -94,6 +92,9 @@ test.describe("Burgs.add", () => {
 
     expect(burgId).not.toBeNull();
 
+    // render the new burg, the way BurgCreator does after Burgs.add
+    await page.evaluate(() => (window as any).Layers.draw("burgIcons", "labels"));
+
     // Open the burg editor
     await page.evaluate((id: number) => {
       (window as any).Controllers.BurgEditor.open(id);
@@ -105,5 +106,27 @@ test.describe("Burgs.add", () => {
     // The port toggle button should have the "inactive" class
     const portButton = page.locator("#burgPort");
     await expect(portButton).toHaveClass(/inactive/);
+  });
+
+  test("repeated burg label click opens the label editor for the same burg", async ({ page }) => {
+    const burgLabels = page.locator("#labels text[data-label-type='burg']");
+    const firstLabel = burgLabels.first();
+    const secondLabel = burgLabels.nth(1);
+    const firstId = await firstLabel.getAttribute("data-id");
+    const secondId = await secondLabel.getAttribute("data-id");
+
+    expect(firstId).not.toBeNull();
+    expect(secondId).not.toBeNull();
+
+    await firstLabel.dispatchEvent("click");
+    await expect(page.locator("#burgEditor")).toHaveAttribute("data-burg-id", firstId!);
+
+    await secondLabel.dispatchEvent("click");
+    await expect(page.locator("#burgEditor")).toHaveAttribute("data-burg-id", secondId!);
+    await expect(page.locator("#labelEditor")).toHaveCount(0);
+
+    await secondLabel.dispatchEvent("click");
+    await expect(page.locator("#labelEditor")).toBeVisible();
+    await expect(page.locator("#burgEditor")).toHaveCount(0);
   });
 });

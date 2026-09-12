@@ -1,5 +1,4 @@
-import { curveCatmullRom, easeLinear, line } from "d3";
-import { Controllers } from "@/controllers";
+import { curveCatmullRom, easeLinear, line, select } from "d3";
 import type { Point } from "../generators/voronoi";
 import { ensureEl, minmax } from "../utils";
 import type { TradeBatch } from "./trade-animation";
@@ -51,12 +50,13 @@ export async function draw(
     }
 
     const segment = segments[idx];
-    const size = options.trade.animation.markerSize;
+    const size = options.app.trade.animation.markerSize;
     const imgSize = segment.type === "land" ? size / 1.6 : size;
-    const duration = options.trade.animation.duration;
-    const segDuration = segment.type === "land" ? duration * options.trade.animation.landDurationModifier : duration;
+    const duration = options.app.trade.animation.duration;
+    const segDuration =
+      segment.type === "land" ? duration * options.app.trade.animation.landDurationModifier : duration;
 
-    const group = tradeAnimation.append("g");
+    const group = select("#tradeAnimation").append("g");
     group
       .append("use")
       .attr("href", `#trade-marker-${segment.type}`)
@@ -122,13 +122,13 @@ export async function draw(
       })
       .on("end", () => {
         group.remove();
-        setTimeout(() => animateSegment(idx + 1), options.trade.animation.segmentChangePause);
+        setTimeout(() => animateSegment(idx + 1), options.app.trade.animation.segmentChangePause);
       });
   }
 }
 
 export function clear(): void {
-  tradeAnimation.selectAll("g").interrupt().remove();
+  select("#tradeAnimation").selectAll("g").interrupt().remove();
 }
 
 export function getPath(points: Point[]): string {
@@ -136,8 +136,8 @@ export function getPath(points: Point[]): string {
 }
 
 export function highlight(points: Point[]): void {
-  tradeAnimation.selectAll("path.highlight").remove();
-  tradeAnimation
+  select("#tradeAnimation").selectAll("path.highlight").remove();
+  select("#tradeAnimation")
     .append("path")
     .attr("class", "highlight")
     .attr("d", lineGen(points))
@@ -149,5 +149,5 @@ export function highlight(points: Point[]): void {
 }
 
 export function clearHighlight(): void {
-  tradeAnimation.selectAll("path.highlight").remove();
+  select("#tradeAnimation").selectAll("path.highlight").remove();
 }

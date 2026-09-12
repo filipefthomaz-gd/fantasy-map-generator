@@ -1,5 +1,5 @@
 import { getColors, getRandomColor } from "../utils";
-import type { PackedGraphFeature } from "./features";
+import type { Feature } from "./features";
 
 declare global {
   var Continents: ContinentsModule;
@@ -12,14 +12,12 @@ export interface Continent {
   feature: number;
 }
 
-// Groups that count as a continent landmass (not tiny islets or lake islands)
-const CONTINENT_GROUPS = new Set(["continent", "island"]);
+// Subtypes that count as a continent landmass (not tiny islets or lake islands)
+const CONTINENT_SUBTYPES = new Set(["continent", "island"]);
 
 class ContinentsModule {
   generate() {
-    const continentFeatures = pack.features.filter(
-      (f): f is PackedGraphFeature => !!f && CONTINENT_GROUPS.has(f.group)
-    );
+    const continentFeatures = pack.features.filter((f): f is Feature => !!f && CONTINENT_SUBTYPES.has(f.subtype));
 
     const colors = getColors(continentFeatures.length);
 
@@ -53,7 +51,7 @@ class ContinentsModule {
     pack.cells.continent = continentIds;
   }
 
-  private getDominantCulture(feature: PackedGraphFeature): number {
+  private getDominantCulture(feature: Feature): number {
     const counts = new Map<number, number>();
     for (const cellId of pack.cells.i) {
       if (pack.cells.f[cellId] !== feature.i) continue;

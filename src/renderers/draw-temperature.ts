@@ -1,31 +1,39 @@
-import { color, curveBasisClosed, interpolateSpectral, leastIndex, line, max, min, range, scaleSequential } from "d3";
-import { connectVertices, convertTemperature, ensureEl, round } from "../utils";
-
-declare global {
-  var drawTemperature: () => void;
-}
+import {
+  color,
+  curveBasisClosed,
+  interpolateSpectral,
+  leastIndex,
+  line,
+  max,
+  min,
+  range,
+  scaleSequential,
+  select
+} from "d3";
+import { Seasons } from "@/components/seasons";
+import { viewport } from "@/components/viewport";
+import { connectVertices, convertTemperature, round } from "../utils";
 
 const temperatureRenderer = (): void => {
   TIME && console.time("drawTemperature");
 
-  temperature.selectAll("*").remove();
+  select("#temperature").selectAll("*").remove();
   const lineGen = line<[number, number]>().curve(curveBasisClosed);
   const scheme = scaleSequential(interpolateSpectral);
 
-  const tMax = +(ensureEl("temperatureEquatorOutput") as HTMLInputElement).max;
-  const tMin = +(ensureEl("temperatureEquatorOutput") as HTMLInputElement).min;
+  const [tMin, tMax] = [-50, 50]; // supported temperature extremes
   const delta = tMax - tMin;
 
   const { cells, vertices } = grid;
   const n = cells.i.length;
 
-  // Use seasonally-adjusted temperatures when a season is active
-  const temps: ArrayLike<number> = (window as any).seasonalTemps || cells.temp;
-
   const checkedCells = new Uint8Array(n);
   const addToChecked = (cellId: number) => {
     checkedCells[cellId] = 1;
   };
+
+  // seasonally-adjusted temperatures when a season is active
+  const temps: ArrayLike<number> = Seasons.getTemps() ?? cells.temp;
 
   const minTemp = Number(min(Array.from(temps))) || 0;
   const maxTemp = Number(max(Array.from(temps))) || 0;
@@ -39,11 +47,11 @@ const temperatureRenderer = (): void => {
     const t = temps[cellId];
     if (checkedCells[cellId] || !isolines.includes(t)) continue;
 
-    const startingVertex = findStart(cellId, t);
-    if (!startingVertex) continue;
-    checkedCells[cellId] = 1;
-
     const ofSameType = (cellId: number) => temps[cellId] >= t;
+
+    const startingVertex = findStart(cellId, ofSameType);
+    if (startingVertex === undefined) continue;
+    checkedCells[cellId] = 1;
     const chain = connectVertices({
       vertices,
       startingVertex,
@@ -59,9 +67,9 @@ const temperatureRenderer = (): void => {
   }
 
   // min temp isoline covers all graph
-  temperature
+  select("#temperature")
     .append("path")
-    .attr("d", `M0,0 h${graphWidth} v${graphHeight} h${-graphWidth} Z`)
+    .attr("d", `M0,0 h${options.map.graph.width} v${options.map.graph.height} h${-options.map.graph.width} Z`)
     .attr("fill", scheme(1 - (minTemp - tMin) / delta))
     .attr("stroke", "none");
 
@@ -73,12 +81,12 @@ const temperatureRenderer = (): void => {
     if (!path) continue;
     const fill = scheme(1 - (t - tMin) / delta);
     const stroke = color(fill)!.darker(0.2);
-    temperature.append("path").attr("d", path).attr("fill", fill).attr("stroke", stroke.toString());
+    select("#temperature").append("path").attr("d", path).attr("fill", fill).attr("stroke", stroke.toString());
   }
 
-  const scale = (ensureEl("temperatureScale") as HTMLSelectElement).value as Parameters<typeof convertTemperature>[1];
+  const scale = options.map.units.temperature.unit as Parameters<typeof convertTemperature>[1];
 
-  const tempLabels = temperature.append("g").attr("id", "tempLabels").attr("fill-opacity", 1);
+  const tempLabels = select("#temperature").append("g").attr("id", "tempLabels").attr("fill-opacity", 1);
   tempLabels
     .selectAll("text")
     .data(labels)
@@ -88,14 +96,14 @@ const temperatureRenderer = (): void => {
     .attr("y", d => d[1])
     .text(d => convertTemperature(d[2], scale));
 
-  // find cell with temp < isotherm and find vertex to start path detection
-  function findStart(i: number, t: number): number | undefined {
+  // find a vertex of the cell that lies on the isotherm, i.e. one that touches a colder cell
+  function findStart(i: number, ofSameType: (cellId: number) => boolean): number | undefined {
     if (cells.b[i]) return cells.v[i].find((v: number) => vertices.c[v].some((c: number) => c >= n)); // map border cell
-    return cells.v[i][cells.c[i].findIndex((c: number) => temps[c] < t || !temps[c])];
+    return cells.v[i].find((v: number) => vertices.c[v].some((c: number) => !ofSameType(c)));
   }
 
   function addLabel(points: [number, number][], t: number): void {
-    const xCenter = svgWidth / 2;
+    const xCenter = viewport.width / 2;
 
     // add label on isoline top center
     const tcIndex = leastIndex(
@@ -120,12 +128,12 @@ const temperatureRenderer = (): void => {
   }
 
   function pushLabel(x: number, y: number, t: number): void {
-    if (x < 20 || x > svgWidth - 20) return;
-    if (y < 20 || y > svgHeight - 20) return;
+    if (x < 20 || x > viewport.width - 20) return;
+    if (y < 20 || y > viewport.height - 20) return;
     labels.push([x, y, t]);
   }
 
   TIME && console.timeEnd("drawTemperature");
 };
 
-window.drawTemperature = temperatureRenderer;
+export { temperatureRenderer as drawTemperature };

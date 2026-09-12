@@ -1,16 +1,6 @@
 import Alea from "alea";
 import { polygonArea, polygonContains } from "d3";
-import {
-  clipPoly,
-  connectVertices,
-  createTypedArray,
-  distanceSquared,
-  isLand,
-  isWater,
-  rn,
-  TYPED_ARRAY_MAX,
-  unique
-} from "../utils";
+import { clipPoly, connectVertices, distanceSquared, isLand, isWater, rn, TYPED_ARRAY_MAX } from "../utils";
 
 declare global {
   var Features: FeatureModule;
@@ -19,6 +9,13 @@ declare global {
 type FeatureType = "ocean" | "lake" | "island";
 
 /* Pack features interface */
+export interface CapturedFeature {
+  name: string;
+  note?: string;
+  type: FeatureType;
+  gridCells: Set<number>;
+}
+
 export interface Feature {
   i: number;
   type: FeatureType;
@@ -30,7 +27,8 @@ export interface Feature {
   area: number;
   shoreline: number[];
   height: number;
-  group: string;
+  subtype: string; // classification within the type: continent/island/isle, ocean/sea/gulf, freshwater/salt/...
+  group: string; // svg group the feature is drawn in
   temp: number;
   flux: number;
   evaporation: number;
@@ -43,6 +41,8 @@ export interface Feature {
   enteringFlux?: number;
   closed?: boolean;
   outCell?: number;
+
+  note?: string;
 
   // Lake-island relationship
   innerIslands?: number[]; // island feature IDs enclosed by this lake
@@ -101,8 +101,7 @@ class FeatureModule {
    * mark Grid features (ocean, lakes, islands) and calculate distance field
    */
   markupGrid() {
-    TIME && console.time("markupGrid");
-    Math.random = Alea(seed); // get the same result on heightmap edit in Erase mode
+    Math.random = Alea(options.map.seed); // get the same result on heightmap edit in Erase mode
 
     const { h: heights, c: neighbors, b: borderCells, i } = grid.cells;
     const cellsNumber = i.length;
@@ -151,9 +150,7 @@ class FeatureModule {
     });
     grid.cells.t = distanceField;
     grid.cells.f = featureIds;
-    grid.features = [0, ...features];
-
-    TIME && console.timeEnd("markupGrid");
+    grid.features = [0 as unknown as GridFeature, ...features];
   }
 
   /**
@@ -222,8 +219,8 @@ class FeatureModule {
       const [startCell, featureVertices] = getCellsData(type, firstCell);
       const points = clipPoly(
         featureVertices.map((vertex: number) => vertices.p[vertex]),
-        graphWidth,
-        graphHeight
+        options.map.graph.width,
+        options.map.graph.height
       );
       const area = polygonArea(points); // feature perimiter area
       const absArea = Math.abs(rn(area));
@@ -243,11 +240,7 @@ class FeatureModule {
 
       if (type === "lake") {
         if (area > 0) feature.vertices = (feature.vertices as number[]).reverse();
-        feature.shoreline = unique(
-          (feature.vertices as number[]).flatMap(vertexIndex =>
-            vertices.c[vertexIndex].filter(index => isLand(index, pack))
-          )
-        );
+        feature.shoreline = Lakes.defineShoreline(feature as Feature);
         feature.height = Lakes.getHeight(feature as Feature);
       }
 
@@ -256,8 +249,6 @@ class FeatureModule {
       } as Feature;
     };
 
-    TIME && console.time("markupPack");
-
     const { cells, vertices } = pack;
     const { c: neighbors, b: borderCells, i } = cells;
     const packCellsNumber = i.length;
@@ -265,10 +256,7 @@ class FeatureModule {
 
     const distanceField = new Int8Array(packCellsNumber); // pack.cells.t
     const featureIds = new Uint16Array(packCellsNumber); // pack.cells.f
-    const haven = createTypedArray({
-      maxValue: packCellsNumber,
-      length: packCellsNumber
-    }); // haven: opposite water cell
+    const haven = new Uint32Array(packCellsNumber); // haven: opposite water cell
     const harbor = new Uint8Array(packCellsNumber); // harbor: number of adjacent water cells
     const features: Feature[] = [];
 
@@ -330,7 +318,6 @@ class FeatureModule {
     pack.cells.haven = haven;
     pack.cells.harbor = harbor;
     pack.features = [0 as unknown as Feature, ...features];
-    TIME && console.timeEnd("markupPack");
   }
 
   /**
@@ -359,9 +346,81 @@ class FeatureModule {
     }
   }
 
-  /**
-   * define feature groups (ocean, sea, gulf, continent, island, isle, freshwater lake, salt lake, etc.)
-   */
+  /** Grid cells a feature covered, plus the data the user owns, so a re-markup can hand it back */
+  captureUserData(): CapturedFeature[] {
+    const gridCellsByFeature = this.mapGridCellsByFeature();
+    if (!gridCellsByFeature) return [];
+
+    const captured: CapturedFeature[] = [];
+    for (const feature of pack.features) {
+      if (!feature?.i || (!feature.name && !feature.note)) continue;
+      const gridCells = gridCellsByFeature.get(feature.i);
+      if (gridCells?.size) captured.push({ name: feature.name, note: feature.note, type: feature.type, gridCells });
+    }
+
+    return captured;
+  }
+
+  /** Hand the captured data to whichever new feature covers most of the old one, dropping the rest */
+  restoreUserData(captured: CapturedFeature[]): void {
+    const { cells, features } = pack;
+    if (!captured.length || !cells?.f) return;
+
+    const capturedByGridCell = new Map<number, number>();
+    captured.forEach((item, index) => {
+      for (const gridCell of item.gridCells) capturedByGridCell.set(gridCell, index);
+    });
+
+    const overlaps = new Map<string, number>(); // `${featureId}:${capturedIndex}` -> shared grid cells
+    for (let i = 0; i < cells.f.length; i++) {
+      const featureId = cells.f[i];
+      if (!featureId) continue;
+      const index = capturedByGridCell.get(cells.g[i]);
+      if (index === undefined) continue;
+      const key = `${featureId}:${index}`;
+      overlaps.set(key, (overlaps.get(key) || 0) + 1);
+    }
+
+    const matches = Array.from(overlaps, ([key, overlap]) => {
+      const [featureId, index] = key.split(":").map(Number);
+      return { featureId, index, overlap };
+    }).sort((a, b) => b.overlap - a.overlap);
+
+    const takenFeatures = new Set<number>();
+    const takenCaptures = new Set<number>();
+
+    for (const { featureId, index, overlap } of matches) {
+      if (takenFeatures.has(featureId) || takenCaptures.has(index)) continue;
+      if (overlap * 2 < captured[index].gridCells.size) continue; // the old feature is mostly gone
+
+      const feature = features[featureId];
+      if (!feature) continue;
+      if (feature.type !== captured[index].type) continue; // a lake raised to land is not the island covering it
+
+      takenFeatures.add(featureId);
+      takenCaptures.add(index);
+      if (captured[index].name) feature.name = captured[index].name;
+      if (captured[index].note) feature.note = captured[index].note;
+    }
+  }
+
+  private mapGridCellsByFeature(): Map<number, Set<number>> | undefined {
+    const { cells } = pack;
+    if (!cells?.f || !cells.g || !pack.features) return undefined;
+
+    const gridCellsByFeature = new Map<number, Set<number>>();
+    for (let i = 0; i < cells.f.length; i++) {
+      const featureId = cells.f[i];
+      if (!featureId) continue;
+
+      const gridCells = gridCellsByFeature.get(featureId) ?? new Set<number>();
+      gridCells.add(cells.g[i]);
+      gridCellsByFeature.set(featureId, gridCells);
+    }
+
+    return gridCellsByFeature;
+  }
+
   defineGroups() {
     const gridCellsNumber = grid.cells.i.length;
     const OCEAN_MIN_SIZE = gridCellsNumber / 25;
@@ -369,20 +428,22 @@ class FeatureModule {
     const CONTINENT_MIN_SIZE = gridCellsNumber / 10;
     const ISLAND_MIN_SIZE = gridCellsNumber / 1000;
 
-    const defineIslandGroup = (feature: Feature) => {
+    const defineIslandSubtype = (feature: Feature) => {
       if (feature.parentLake !== undefined) return "lake_island";
+      const prevFeature = pack.features[pack.cells.f[feature.firstCell - 1]];
+      if (prevFeature && prevFeature.type === "lake") return "lake_island";
       if (feature.cells > CONTINENT_MIN_SIZE) return "continent";
       if (feature.cells > ISLAND_MIN_SIZE) return "island";
       return "isle";
     };
 
-    const defineOceanGroup = (feature: Feature) => {
+    const defineOceanSubtype = (feature: Feature) => {
       if (feature.cells > OCEAN_MIN_SIZE) return "ocean";
       if (feature.cells > SEA_MIN_SIZE) return "sea";
       return "gulf";
     };
 
-    const defineLakeGroup = (feature: Feature) => {
+    const defineLakeSubtype = (feature: Feature) => {
       if (feature.temp < -3) return "frozen";
       if (feature.height > 60 && feature.cells < 10 && feature.firstCell % 10 === 0) return "lava";
 
@@ -396,10 +457,10 @@ class FeatureModule {
       return "freshwater";
     };
 
-    const defineGroup = (feature: Feature) => {
-      if (feature.type === "island") return defineIslandGroup(feature);
-      if (feature.type === "ocean") return defineOceanGroup(feature);
-      if (feature.type === "lake") return defineLakeGroup(feature);
+    const defineSubtype = (feature: Feature) => {
+      if (feature.type === "island") return defineIslandSubtype(feature);
+      if (feature.type === "ocean") return defineOceanSubtype(feature);
+      if (feature.type === "lake") return defineLakeSubtype(feature);
       throw new Error(`Markup: unknown feature type ${feature.type}`);
     };
 
@@ -407,8 +468,14 @@ class FeatureModule {
       if (!feature || feature.type === "ocean") continue;
 
       if (feature.type === "lake") feature.height = Lakes.getHeight(feature);
-      feature.group = defineGroup(feature);
+      feature.subtype = defineSubtype(feature);
+      feature.group = this.getDefaultGroup(feature);
     }
+  }
+
+  getDefaultGroup(feature: Feature): string {
+    if (feature.type === "lake") return feature.subtype || "freshwater";
+    return feature.subtype === "lake_island" ? "lake_island" : "sea_island";
   }
 }
 

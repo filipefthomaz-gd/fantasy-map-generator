@@ -1,4 +1,8 @@
 import { Browser, BrowserContext, expect, Page, test } from "@playwright/test";
+import { waitForMap } from "./wait-for-map";
+
+// map globals used inside page.evaluate
+declare const options: { map: { labels: { groups: { name: string; active?: boolean }[] } } };
 
 // All tests in this describe block only READ the DOM — they never modify state.
 // Load the map once for the entire suite instead of before every test.
@@ -23,9 +27,8 @@ test.describe("map layers", () => {
     // - Snapshots are OS-independent (configured in playwright.config.ts).
     await sharedPage.goto("/?seed=test-seed&&width=1280&height=720");
 
-    // Wait for map generation to complete by checking window.mapId
-    // mapId is exposed on window at the very end of showStatistics()
-    await sharedPage.waitForFunction(() => (window as any).mapId !== undefined, { timeout: 60000 });
+    // Wait for map generation to complete
+    await waitForMap(sharedPage);
 
     // Additional wait for any rendering/animations to settle
     await sharedPage.waitForTimeout(500);
@@ -95,6 +98,8 @@ test.describe("map layers", () => {
     expect(html).toMatchSnapshot("temperature.html");
   });
 
+  // The layer is off by default and its content is render output, so the group is empty here.
+  // Wind arrows and circles are covered by layer-teardown.spec.ts, which turns the layer on.
   test("precipitation layer", async () => {
     const prec = sharedPage.locator("#prec");
     await expect(prec).toBeAttached();
@@ -177,46 +182,49 @@ test.describe("map layers", () => {
     expect(html).toMatchSnapshot("anchors.html");
   });
 
-  // Labels layer (without text content due to font rendering)
-  test("labels layer", async () => {
+  test("labels use flat groups and entity-specific rendering", async () => {
     const labels = sharedPage.locator("#labels");
     await expect(labels).toBeAttached();
-    // Remove text content but keep structure (text rendering varies)
-    const html = await labels.evaluate(el => {
-      const clone = el.cloneNode(true) as Element;
-      clone.querySelectorAll("text, tspan").forEach(t => t.remove());
-      return clone.outerHTML;
+    const structure = await labels.evaluate(el => {
+      const groups = Array.from(el.querySelectorAll<SVGGElement>(":scope > g"));
+      return {
+        groupIds: groups.map(group => group.id),
+        nestedGroups: el.querySelectorAll(":scope > g > g").length,
+        stateTextPaths: el.querySelectorAll("text[data-label-type='state'] textPath").length,
+        burgLabels: el.querySelectorAll("text[data-label-type='burg']").length,
+        burgTextPaths: el.querySelectorAll("text[data-label-type='burg'] textPath").length
+      };
     });
-    expect(html).toMatchSnapshot("labels.html");
+
+    expect(structure.groupIds).toEqual(expect.arrayContaining(["labels-state", "labels-town", "labels-added"]));
+    expect(structure.nestedGroups).toBe(0);
+    expect(structure.stateTextPaths).toBeGreaterThan(0);
+    expect(structure.burgLabels).toBeGreaterThan(0);
+    expect(structure.burgTextPaths).toBe(0);
   });
 
-  test("labels group can be hidden with display:none", async () => {
-    await sharedPage.evaluate(() => {
-      const styleElementSelect = document.getElementById("styleElementSelect") as HTMLSelectElement;
-      const styleGroupSelect = document.getElementById("styleGroupSelect") as HTMLSelectElement;
-      const styleLabelsHideGroup = document.getElementById("styleLabelsHideGroup") as HTMLInputElement;
+  // a label group is hidden by deactivating it (the pre-1.140.0 style display:none control is gone).
+  // The only test here that changes state, it restores the group before it ends
+  test("deactivated labels group is not rendered", async () => {
+    const counts = await sharedPage.evaluate(async () => {
+      const stateGroup = options.map.labels.groups.find(group => group.name === "state")!;
+      const count = () => document.querySelectorAll("#labels-state > *").length;
+      const before = count();
 
-      styleElementSelect.value = "labels";
-      styleElementSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      stateGroup.active = false;
+      (window as any).Layers.draw("labels");
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const deactivated = count();
 
-      styleGroupSelect.value = "states";
-      styleGroupSelect.dispatchEvent(new Event("change", { bubbles: true }));
-
-      styleLabelsHideGroup.checked = true;
-      styleLabelsHideGroup.dispatchEvent(new Event("change", { bubbles: true }));
+      delete stateGroup.active;
+      (window as any).Layers.draw("labels");
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return { before, deactivated, reactivated: count() };
     });
 
-    const statesGroup = sharedPage.locator("#labels #states");
-    await expect(statesGroup).toHaveCSS("display", "none");
-
-    await sharedPage.evaluate(() => {
-      const styleLabelsHideGroup = document.getElementById("styleLabelsHideGroup") as HTMLInputElement;
-      styleLabelsHideGroup.checked = false;
-      styleLabelsHideGroup.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-    const inlineDisplay = await statesGroup.evaluate(el => (el as SVGGElement).style.display);
-    expect(inlineDisplay).toBe("");
+    expect(counts.before).toBeGreaterThan(0);
+    expect(counts.deactivated).toBe(0);
+    expect(counts.reactivated).toBe(counts.before);
   });
 
   // Military and markers
@@ -256,10 +264,9 @@ test.describe("map layers", () => {
     await sharedPage.evaluate(() => {
       // only the first good is visible by default; make all of them visible for this test
       (window as any).pack.goods.forEach((good: any) => (good.visible = true));
-      (window as any).toggleGoods();
-      (window as any).drawGoods();
+      (window as any).Layers.toggle("goods");
       // markets render in a standalone layer, toggled independently
-      (window as any).toggleMarketsLayer();
+      (window as any).Layers.toggle("markets");
     });
     await sharedPage.waitForTimeout(300);
 
@@ -288,8 +295,8 @@ test.describe("map layers", () => {
 
     // Restore: toggle goods and markets layers off
     await sharedPage.evaluate(() => {
-      (window as any).toggleGoods();
-      (window as any).toggleMarketsLayer();
+      (window as any).Layers.toggle("goods");
+      (window as any).Layers.toggle("markets");
     });
   });
 

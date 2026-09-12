@@ -1,6 +1,15 @@
 // Save the whole .map project to storage, machine or cloud
+
+import { closeDialogs } from "@/components/dialog/dialog-helpers";
+import { Layers } from "@/components/layers";
+import { tip } from "@/components/tooltips";
+import { GraphOverride } from "@/generators/graph-override";
+import { Notes } from "@/generators/notes";
 import { Services } from "@/services";
-import { ensureEl, link, parseError, rn } from "@/utils";
+import { getUsedFonts } from "@/services/fonts";
+import { savedMessage } from "@/services/platform";
+import { VERSION } from "@/services/versioning";
+import { ensureEl, getFileName, link, parseError, rn } from "@/utils";
 
 type SaveMethod = "storage" | "machine" | "dropbox";
 
@@ -44,76 +53,68 @@ function prepareMapData(): string {
   const date = new Date();
   const dateString = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   const license = "File can be loaded in azgaar.github.io/Fantasy-Map-Generator";
-  const params = [VERSION, license, dateString, seed, graphWidth, graphHeight, mapId].join("|");
-  const settings = [
-    distanceUnitInput.value,
-    distanceScale,
-    areaUnit.value,
-    heightUnit.value,
-    heightExponentInput.value,
-    temperatureScale.value,
-    "", // previously used for barSize.value
-    "", // previously used for barLabel.value
-    "", // previously used for barBackColor.value
-    "", // previously used for barBackColor.value
-    "", // previously used for barPosX.value
-    "", // previously used for barPosY.value
-    populationRate,
-    urbanization,
-    mapSizeOutput.value,
-    latitudeOutput.value,
-    "", // previously used for temperatureEquatorOutput.value
-    "", // previously used for tempNorthOutput.value
-    precOutput.value,
-    JSON.stringify(options),
-    mapName.value,
-    +hideLabels.checked,
-    stylePreset.value,
-    +rescaleLabels.checked,
-    urbanDensity,
-    longitudeOutput.value,
-    ensureEl<HTMLInputElement>("growthRate").value,
-    +useSphericalArea
+  const params = [
+    VERSION,
+    license,
+    dateString,
+    options.map.seed,
+    options.map.graph.width,
+    options.map.graph.height,
+    mapHistory.at(-1)?.created ?? Date.now() // the map id: when the map on screen was created
   ].join("|");
-  const coords = JSON.stringify(mapCoordinates);
-  const biomes = [biomesData.color, biomesData.habitability, biomesData.name].join("|");
-  const notesData = JSON.stringify(notes);
-  const rulersString = rulers.toString();
-  const fonts = JSON.stringify(getUsedFonts(svg.node()!));
+
+  const settings = JSON.stringify(options.map); // what the map is; the requests and preferences stay out
+  const measurers = JSON.stringify(pack.measurers ?? []);
+  const journeys = JSON.stringify(pack.journeys ?? []);
+  const continents = JSON.stringify(pack.continents ?? []);
+  const fonts = JSON.stringify(getUsedFonts(ensureEl("map") as Element as SVGSVGElement, Notes.getTexts()));
+  const layers = JSON.stringify(Layers.state);
+  const graphOverride = JSON.stringify(GraphOverride.state);
 
   // save svg
   const cloneEl = ensureEl("map").cloneNode(true) as SVGSVGElement;
 
   // reset transform values to default
-  cloneEl.setAttribute("width", String(graphWidth));
-  cloneEl.setAttribute("height", String(graphHeight));
+  cloneEl.setAttribute("width", String(options.map.graph.width));
+  cloneEl.setAttribute("height", String(options.map.graph.height));
   cloneEl.querySelector("#viewbox")?.removeAttribute("transform");
+
+  // relief icons are stored in pack.relief, the layer holds only the currently visible ones
+  const cloneTerrain = cloneEl.querySelector("#terrain");
+  if (cloneTerrain) cloneTerrain.innerHTML = "";
+
+  for (const group of Array.from(cloneEl.querySelectorAll("#emblems > g"))) group.innerHTML = "";
 
   const cloneRuler = cloneEl.querySelector("#ruler");
   if (cloneRuler) cloneRuler.innerHTML = ""; // always remove rulers
   const cloneTradeAnimation = cloneEl.querySelector("#tradeAnimation");
   if (cloneTradeAnimation) cloneTradeAnimation.innerHTML = ""; // always remove transient trade animations
+  cloneEl.querySelector("#journeyOverlay")?.remove(); // transient journey path-editing handles
+  cloneEl.querySelector("#journeyTravel")?.remove(); // transient journey travel animation
 
   const serializedSVG = new XMLSerializer().serializeToString(cloneEl);
 
-  const { spacing, cellsX, cellsY, boundary, points, features, cellsDesired } = grid;
-  const gridGeneral = JSON.stringify({ spacing, cellsX, cellsY, boundary, points, features, cellsDesired });
+  const { spacing, cellsX, cellsY, boundary, points, features } = grid;
+  const gridGeneral = JSON.stringify({ spacing, cellsX, cellsY, boundary, points, features });
   const packFeatures = JSON.stringify(pack.features);
+  const biomes = JSON.stringify(pack.biomes);
   const cultures = JSON.stringify(pack.cultures);
   const states = JSON.stringify(pack.states);
   const burgs = JSON.stringify(pack.burgs);
   const religions = JSON.stringify(pack.religions);
   const provinces = JSON.stringify(pack.provinces);
   const rivers = JSON.stringify(pack.rivers);
+  const relief = JSON.stringify(pack.relief || []);
   const markers = JSON.stringify(pack.markers);
   const cellRoutes = JSON.stringify(pack.cells.routes);
   const routes = JSON.stringify(pack.routes);
   const zones = JSON.stringify(pack.zones);
   const ice = JSON.stringify(pack.ice);
-  const continents = pack.continents ? JSON.stringify(pack.continents) : "";
-  const goods = JSON.stringify(pack.goods || []);
+  const goods = JSON.stringify(pack.goods);
   const markets = JSON.stringify(pack.markets || []);
   const deals = JSON.stringify(pack.deals || []);
+  const labels = JSON.stringify(pack.addedLabels || []);
+  const styleData = JSON.stringify(styles);
 
   // store custom good icons
   const goodIconsEl = ensureEl("good-icons");
@@ -123,10 +124,10 @@ function prepareMapData(): string {
     .replace(/[\r\n]+/g, " "); // map data is split by CRLF on load
 
   // store name array only if not the same as default
-  const defaultNB = Names.getNameBases();
-  const namesData = nameBases
+  const defaultNameBases = Names.getNameBases();
+  const namesData = Names.nameBases
     .map((b, i) => {
-      const names = defaultNB[i] && defaultNB[i].b === b.b ? "" : b.b;
+      const names = defaultNameBases[i] && defaultNameBases[i].b === b.b ? "" : b.b;
       return `${b.name}|${b.min}|${b.max}|${b.d}|${b.m}|${names}`;
     })
     .join("/");
@@ -138,9 +139,9 @@ function prepareMapData(): string {
   const mapData = [
     params,
     settings,
-    coords,
+    "", // deprecated separate mapCoordinates, now options.map.geography.coordinates
     biomes,
-    notesData,
+    "", // deprecated notes array, now a note field on the entity it describes
     serializedSVG,
     gridGeneral,
     grid.cells.h,
@@ -169,24 +170,31 @@ function prepareMapData(): string {
     provinces,
     namesData,
     rivers,
-    rulersString,
+    "", // rulers are deprecated, use pack.measurers instead
     fonts,
     markers,
     cellRoutes,
     routes,
     zones,
     ice,
-    "", // [40] mapTimeline intentionally not persisted (bloats save size, not restored on load)
-    pack.cells.resource ? Array.from(pack.cells.resource).join(",") : "", // [41]
-    continents, // [42]
-    pack.cells.resourceSecondary ? Array.from(pack.cells.resourceSecondary).join(",") : "", // [43]
-    pack.cells.resourceRichness ? Array.from(pack.cells.resourceRichness).join(",") : "", // [44]
-    pack.cells.good ? Array.from(pack.cells.good).join(",") : "", // [45]
-    goods, // [46]
-    markets, // [47]
-    deals, // [48]
-    pack.cells.market ? Array.from(pack.cells.market).join(",") : "", // [49]
-    customGoodIcons // [50]
+    pack.cells.good,
+    goods,
+    markets,
+    deals,
+    pack.cells.market,
+    customGoodIcons,
+    measurers,
+    labels,
+    styleData,
+    relief,
+    layers,
+    graphOverride,
+    journeys,
+    // fork-only data below: per-cell resources and continents
+    pack.cells.resource ?? "",
+    continents,
+    pack.cells.resourceSecondary ?? "",
+    pack.cells.resourceRichness ?? ""
   ].join("\r\n");
   return mapData;
 }
@@ -208,7 +216,7 @@ function saveToMachine(mapData: string, filename: string): void {
   link.href = URL;
   link.click();
 
-  tip('Map is saved to the "Downloads" folder (CTRL + J to open)', true, "success", 8000);
+  tip(savedMessage("Map"), true, "success", 8000);
   setTimeout(() => window.URL.revokeObjectURL(URL), 5000);
 }
 

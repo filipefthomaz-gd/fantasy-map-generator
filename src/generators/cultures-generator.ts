@@ -1,8 +1,21 @@
 import { max, quadtree, range } from "d3";
-import { abbreviate, biased, ensureEl, getColors, getRandomColor, minmax, P, rand, rn, rw } from "../utils";
+import { Emblems } from "@/generators/emblems-generator";
+import { abbreviate, biased, getColors, getRandomColor, minmax, P, rand, rn, rw } from "../utils";
+
+/** The named culture sets the user picks from: how many cultures each holds and how often it is rolled */
+export const CULTURE_SETS: Record<string, { name: string; max: number; probability: number }> = {
+  world: { name: "All-world", max: 32, probability: 10 },
+  european: { name: "European", max: 15, probability: 10 },
+  oriental: { name: "Oriental", max: 13, probability: 2 },
+  english: { name: "English", max: 10, probability: 5 },
+  antique: { name: "Antique", max: 10, probability: 3 },
+  highFantasy: { name: "High Fantasy", max: 17, probability: 11 },
+  darkFantasy: { name: "Dark Fantasy", max: 18, probability: 3 },
+  random: { name: "Random", max: 100, probability: 1 }
+};
 
 declare global {
-  var Cultures: CulturesModule;
+  var Cultures: CulturesGenerator;
 }
 
 export interface Culture {
@@ -13,6 +26,9 @@ export interface Culture {
   lock?: boolean;
   code?: string;
   center?: number;
+  // transient coordinates cached by the heightmap editor across a re-graph
+  x?: number;
+  y?: number;
   sort?: (i: number) => number;
   odd?: number;
   color?: string;
@@ -24,18 +40,19 @@ export interface Culture {
   area?: number;
   rural?: number;
   urban?: number;
+  note?: string;
 }
 
 export const CULTURE_TYPES = ["Generic", "Hunting", "Highland", "River", "Lake", "Naval", "Nomadic"] as const;
 export type CultureType = (typeof CULTURE_TYPES)[number];
 export const DEFAULT_CULTURE_TYPE: CultureType = "Generic";
 
-class CulturesModule {
+class CulturesGenerator {
   cells: any;
 
   getRandomShield() {
-    const type = rw(COA.shields.types);
-    return rw(COA.shields[type]);
+    const type = rw(Emblems.shields.types);
+    return rw(Emblems.shields[type]);
   }
 
   getDefault(count: number = 0): Omit<Culture, "i" | "type">[] {
@@ -55,7 +72,7 @@ class CulturesModule {
     const sf = (cell: number, fee = 4) =>
       cells.haven[cell] && pack.features[cells.f[cells.haven[cell]]].type !== "lake" ? 1 : fee; // not on sea coast fee
 
-    if (culturesSet.value === "european") {
+    if (options.map.cultures.set === "european") {
       return [
         {
           name: "Shwazen",
@@ -165,7 +182,7 @@ class CulturesModule {
       ];
     }
 
-    if (culturesSet.value === "oriental") {
+    if (options.map.cultures.set === "oriental") {
       return [
         {
           name: "Koryo",
@@ -261,7 +278,7 @@ class CulturesModule {
       ];
     }
 
-    if (culturesSet.value === "english") {
+    if (options.map.cultures.set === "english") {
       const getName = () => Names.getBase(1, 5, 9, "");
       return [
         { name: getName(), base: 1, odd: 1, shield: "heater" },
@@ -277,7 +294,7 @@ class CulturesModule {
       ];
     }
 
-    if (culturesSet.value === "antique") {
+    if (options.map.cultures.set === "antique") {
       return [
         {
           name: "Roman",
@@ -394,7 +411,7 @@ class CulturesModule {
       ];
     }
 
-    if (culturesSet.value === "highFantasy") {
+    if (options.map.cultures.set === "highFantasy") {
       return [
         // fantasy races
         {
@@ -520,7 +537,7 @@ class CulturesModule {
       ];
     }
 
-    if (culturesSet.value === "darkFantasy") {
+    if (options.map.cultures.set === "darkFantasy") {
       return [
         // common real-world English
         {
@@ -767,9 +784,9 @@ class CulturesModule {
       ];
     }
 
-    if (culturesSet.value === "random") {
+    if (options.map.cultures.set === "random") {
       return range(count).map(() => {
-        const rnd = rand(nameBases.length - 1);
+        const rnd = rand(Names.nameBases.length - 1);
         const name = Names.getBaseShort(rnd);
         return { name, base: rnd, odd: 1, shield: this.getRandomShield() };
       });
@@ -1002,7 +1019,7 @@ class CulturesModule {
         shield: "banner"
       },
       {
-        name: "Hebrew",
+        name: "Levent",
         base: 42,
         odd: 0.2,
         sort: (i: number) => (n(i) / td(i, 18)) * sf(i),
@@ -1012,12 +1029,12 @@ class CulturesModule {
   }
 
   generate() {
-    TIME && console.time("generateCultures");
+    options.map.cultures.set = options.generation.cultures.set;
     this.cells = pack.cells;
     const cultureIds = new Uint16Array(this.cells.i.length); // cell cultures
 
-    const culturesInputNumber = +(ensureEl("culturesInput") as HTMLInputElement).value;
-    const culturesInSetNumber = +((ensureEl("culturesSet") as HTMLSelectElement).selectedOptions[0].dataset.max ?? "0");
+    const culturesInputNumber = options.generation.cultures.limit;
+    const culturesInSetNumber = CULTURE_SETS[options.map.cultures.set]?.max ?? 0;
     let count = Math.min(culturesInputNumber, culturesInSetNumber);
     const populated = this.cells.i.filter((i: number) => this.cells.s[i]); // populated cells
 
@@ -1053,7 +1070,7 @@ class CulturesModule {
       } else {
         WARN && console.warn(`Not enough populated cells (${populated.length}). Will generate only ${count} cultures`);
         alertMessage.innerHTML = /* html */ ` There are only ${populated.length} populated cells and it's insufficient livable area.<br />
-          Only ${count} out of ${culturesInput.value} requested cultures will be generated.<br />
+          Only ${count} out of ${options.generation.cultures.limit} requested cultures will be generated.<br />
           Please consider changing climate settings in the World Configurator`;
         $("#alert").dialog({
           resizable: false,
@@ -1096,12 +1113,12 @@ class CulturesModule {
     pack.cultures = cultures;
     const centers = quadtree<number>();
     const colors = getColors(count);
-    const emblemShape = (ensureEl("emblemShape") as HTMLInputElement).value;
+    const emblemShape = Emblems.shape;
 
     const codes: string[] = [];
 
     const placeCenter = (sortingFn: (i: number) => number) => {
-      let spacing = (graphWidth + graphHeight) / 2 / count;
+      let spacing = (options.map.graph.width + options.map.graph.height) / 2 / count;
       const MAX_ATTEMPTS = 100;
 
       const sorted = [...populated].sort((a, b) => sortingFn(b) - sortingFn(a));
@@ -1126,7 +1143,7 @@ class CulturesModule {
       if (
         (this.cells.harbor[i] && f.type !== "lake" && P(0.1)) ||
         (this.cells.harbor[i] === 1 && P(0.6)) ||
-        (pack.features[this.cells.f[i]].group === "isle" && P(0.4))
+        (pack.features[this.cells.f[i]].subtype === "isle" && P(0.4))
       )
         return "Naval"; // low water cross penalty and high for non-along-coastline growth
       if (this.cells.r[i] && this.cells.fl[i] > 100) return "River"; // no River cross penalty, penalty for non-River growth
@@ -1142,7 +1159,7 @@ class CulturesModule {
       else if (type === "Nomadic") base = 1.5;
       else if (type === "Hunting") base = 0.7;
       else if (type === "Highland") base = 1.2;
-      return rn(((Math.random() * (ensureEl("sizeVariety") as HTMLInputElement).valueAsNumber) / 2 + 1) * base, 1);
+      return rn(((Math.random() * options.generation.cultures.sizeVariety) / 2 + 1) * base, 1);
     };
 
     cultures.forEach((c: Culture, i: number) => {
@@ -1190,17 +1207,15 @@ class CulturesModule {
       type: DEFAULT_CULTURE_TYPE
     });
 
-    // make sure all bases exist in nameBases
-    if (!nameBases.length) {
+    // make sure all bases exist in Names.nameBases
+    if (!Names.nameBases.length) {
       ERROR && console.error("Name base is empty, default nameBases will be applied");
-      nameBases = Names.getNameBases();
+      Names.nameBases = Names.getNameBases();
     }
 
     cultures.forEach((c: Culture) => {
-      c.base = c.base % nameBases.length;
+      c.base = c.base % Names.nameBases.length;
     });
-
-    TIME && console.timeEnd("generateCultures");
   }
 
   add(center: number) {
@@ -1223,9 +1238,6 @@ class CulturesModule {
     const i = pack.cultures.length;
     const color = getRandomColor();
 
-    // define emblem shape
-    const emblemShape = (document.getElementById("emblemShape") as HTMLInputElement).value;
-
     pack.cultures.push({
       name,
       color,
@@ -1240,19 +1252,18 @@ class CulturesModule {
       urban: 0,
       origins: [pack.cells.culture[center]],
       code,
-      shield: emblemShape === "random" ? this.getRandomShield() : ""
+      shield: Emblems.shape === "random" ? this.getRandomShield() : ""
     });
   }
 
   expand() {
-    TIME && console.time("expandCultures");
     const { cells, cultures } = pack;
 
     const queue = new FlatQueue();
     const cost: number[] = [];
 
-    const neutralRate = (document.getElementById("neutralRate") as HTMLInputElement | null)?.valueAsNumber || 1;
-    const maxExpansionCost = cells.i.length * 0.6 * neutralRate; // limit cost for culture growth
+    const growthRate = options.generation.cultures.growthRate;
+    const maxExpansionCost = cells.i.length * 0.6 * growthRate; // limit cost for culture growth
 
     // remove culture from all cells except of locked
     const hasLocked = cultures.some(c => !c.removed && c.lock);
@@ -1273,9 +1284,9 @@ class CulturesModule {
 
     const getBiomeCost = (c: number, biome: number, type: string) => {
       if (cells.biome[cultures[c].center as number] === biome) return 10; // tiny penalty for native biome
-      if (type === "Hunting") return biomesData.cost[biome] * 5; // non-native biome penalty for hunters
-      if (type === "Nomadic" && biome > 4 && biome < 10) return biomesData.cost[biome] * 10; // forest biome penalty for nomads
-      return biomesData.cost[biome] * 2; // general non-native biome penalty
+      if (type === "Hunting") return pack.biomes[biome].cost * 5; // non-native biome penalty for hunters
+      if (type === "Nomadic" && biome > 4 && biome < 10) return pack.biomes[biome].cost * 10; // forest biome penalty for nomads
+      return pack.biomes[biome].cost * 2; // general non-native biome penalty
     };
 
     const getHeightCost = (i: number, h: number, type: string) => {
@@ -1335,9 +1346,24 @@ class CulturesModule {
         }
       });
     }
+  }
 
-    TIME && console.timeEnd("expandCultures");
+  regenerate(): void {
+    this.generate();
+    this.expand();
+
+    pack.states = pack.states.map(state =>
+      !state.i || state.removed ? state : { ...state, culture: pack.cells.culture[state.center] }
+    );
+    pack.burgs = pack.burgs.map(burg =>
+      !burg.i || burg.removed ? burg : { ...burg, culture: pack.cells.culture[burg.cell] }
+    );
+    pack.religions = pack.religions.map(religion =>
+      !religion.i || religion.removed ? religion : { ...religion, culture: pack.cells.culture[religion.center] }
+    );
   }
 }
 
-window.Cultures = new CulturesModule();
+// biome-ignore lint/suspicious/noRedeclare: legacy seam
+export const Cultures = new CulturesGenerator();
+window.Cultures = Cultures;

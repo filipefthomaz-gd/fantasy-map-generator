@@ -1,7 +1,14 @@
 import { test, expect } from "@playwright/test";
+import { waitForMap } from "./wait-for-map";
 
-// software WebGL (SwiftShader) requires an explicit opt-in in recent Chromium
-test.use({ launchOptions: { args: ["--enable-unsafe-swiftshader"] } });
+// software WebGL (SwiftShader) requires an explicit opt-in in recent Chromium. Overriding
+// launchOptions replaces the config's, so the CHROMIUM_PATH escape hatch has to ride along here too
+test.use({
+  launchOptions: {
+    args: ["--enable-unsafe-swiftshader"],
+    ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {})
+  }
+});
 
 test.describe("3D view with eroded terrain", () => {
   // map generation + 3D view + software-WebGL bake can be slow under full-suite load
@@ -9,13 +16,10 @@ test.describe("3D view with eroded terrain", () => {
 
   test("bakes erosion detail and renders without errors", async ({ page }) => {
     const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
+    page.on("pageerror", error => errors.push(`pageerror: ${error.message}`));
 
     await page.goto("/");
-    // mapId is set at the very end of map generation in showStatistics()
-    await page.waitForFunction(() => (window as any).mapId !== undefined, {
-      timeout: 120000,
-    });
+    await waitForMap(page);
 
     const hasWebGL = await page.evaluate(() => {
       const canvas = document.createElement("canvas");
@@ -27,7 +31,7 @@ test.describe("3D view with eroded terrain", () => {
     await page.evaluate(() => (window as any).Controllers.View3d.open("viewMesh"));
     await page.waitForSelector("#canvas3d", { state: "attached", timeout: 60000 });
     await page.waitForFunction(async () => (await (window as any).Controllers.View3d.isOn()) === true, {
-      timeout: 60000,
+      timeout: 60000
     });
 
     // enable eroded terrain via the settings checkbox (dialog opens with the view)
@@ -36,13 +40,12 @@ test.describe("3D view with eroded terrain", () => {
 
     // the bake must complete and cache the dense height field
     await page.waitForFunction(async () => await (window as any).Controllers.View3d.isCached(), {
-      timeout: 60000,
+      timeout: 60000
     });
 
     // labels and icons sample the baked field: heights must be finite numbers
     const centerHeight = await page.evaluate(() => {
-      const w = (window as any).graphWidth;
-      const h = (window as any).graphHeight;
+      const { width: w, height: h } = (window as any).options.map.graph;
       return (window as any).Controllers.View3d.heightAt(w / 2, h / 2, 50);
     });
     expect(Number.isFinite(centerHeight)).toBe(true);

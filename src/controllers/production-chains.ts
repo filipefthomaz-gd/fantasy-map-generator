@@ -1,4 +1,5 @@
 import { type Selection, select, zoom, zoomIdentity } from "d3";
+import { tip } from "@/components/tooltips";
 import type { Good } from "../generators/goods-generator";
 import { ensureEl } from "../utils";
 import { C_12 } from "../utils/colorUtils";
@@ -126,6 +127,7 @@ function open() {
     return;
   }
 
+  renderDialog();
   const contentEl = ensureEl("productionChainsContent");
   const bounds = getLayoutBounds(layout);
   const dialogSize = getDialogSize(bounds);
@@ -143,10 +145,21 @@ function open() {
     width: dialogSize.width,
     height: dialogSize.height,
     position: { my: "center", at: "center", of: window },
-    close() {
-      contentEl.innerHTML = "";
-    }
+    close: closeProductionChains
   });
+}
+
+function renderDialog(): void {
+  document.getElementById("productionChainsDialog")?.remove();
+  const editorHtml = /* html */ `<div id="productionChainsDialog" class="dialog" style="padding:0">
+      <div id="productionChainsContent" style="overflow:auto"></div>
+    </div>`;
+  ensureEl("dialogs").insertAdjacentHTML("beforeend", editorHtml);
+}
+
+function closeProductionChains(): void {
+  $("#productionChainsDialog").dialog("destroy");
+  ensureEl("productionChainsDialog").remove();
 }
 
 function getChainGoods(goods: Good[]): Good[] {

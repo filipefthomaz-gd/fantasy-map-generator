@@ -1,34 +1,15 @@
-import { rn } from "../utils";
+import { Layers } from "@/components/layers";
+import type { Marker } from "@/generators/markers-generator";
+import { ViewportLayers, type ViewportRenderContext } from "@/renderers/viewport/viewport-renderer";
+import { isImageIcon } from "@/utils/fileUtils";
+import { rn } from "@/utils/numberUtils";
+import { escapeHtml } from "@/utils/stringUtils";
 
-interface Marker {
-  i: number;
-  icon: string;
-  x: number;
-  y: number;
-  name?: string;
-  type?: string;
-  dx?: number;
-  dy?: number;
-  px?: number;
-  size?: number;
-  pin?: string;
-  fill?: string;
-  stroke?: string;
-  pinned?: boolean;
-  hidden?: boolean;
-}
+const layer = ViewportLayers.register({ id: "markers", render: reconcileMarkers });
+let editedMarker: Marker | null = null;
+let visibleMarkerIds: Set<number> | null = null;
 
-declare global {
-  var drawMarkers: () => void;
-  var drawMarker: (marker: Marker, rescale?: number) => string;
-  var getPin: (shape?: string, fill?: string, stroke?: string) => string;
-}
-
-type PinShapeFunction = (fill: string, stroke: string) => string;
-type PinShapes = { [key: string]: PinShapeFunction };
-
-// prettier-ignore
-const pinShapes: PinShapes = {
+const pinShapes: { [key: string]: (fill: string, stroke: string) => string } = {
   bubble: (fill: string, stroke: string) =>
     `<path d="M6,19 l9,10 L24,19" fill="${stroke}" stroke="none" /><circle cx="15" cy="15" r="10" fill="${fill}" stroke="${stroke}"/>`,
   pin: (fill: string, stroke: string) =>
@@ -54,43 +35,68 @@ const pinShapes: PinShapes = {
   no: () => ""
 };
 
-const getPinForShape = (shape = "bubble", fill = "#fff", stroke = "#000"): string => {
+const getPin = (shape = "bubble", fill = "#fff", stroke = "#000"): string => {
   const shapeFunction = pinShapes[shape] || pinShapes.bubble;
   return shapeFunction(fill, stroke);
 };
 
-function markerRenderer(marker: Marker, rescale = 1): string {
-  const { i, icon, x, y, dx = 50, dy = 50, px = 12, size = 30, pin, fill, stroke } = marker;
-  const id = `marker${i}`;
-  const zoomSize = rescale ? Math.max(rn(size / 5 + 24 / scale, 2), 1) : size;
-  const viewX = rn(x - zoomSize / 2, 1);
-  const viewY = rn(y - zoomSize, 1);
-
-  const isExternal = icon.startsWith("http") || icon.startsWith("data:image");
-
-  return /* html */ `
-    <svg id="${id}" viewbox="0 0 30 30" width="${zoomSize}" height="${zoomSize}" x="${viewX}" y="${viewY}">
-      <g>${getPin(pin, fill, stroke)}</g>
-      <text x="${dx}%" y="${dy}%" font-size="${px}px" >${isExternal ? "" : icon}</text>
-      <image x="${dx / 2}%" y="${dy / 2}%" width="${px}px" height="${px}px" href="${isExternal ? icon : ""}" />
-    </svg>`;
+export function setEditedMarker(marker: Marker | null): void {
+  editedMarker = marker;
+  layer.render();
 }
 
-const markersRenderer = (): void => {
+export const setMarkersFilter = (ids: number[] | null): void => {
+  visibleMarkerIds = ids ? new Set(ids) : null;
+};
+
+export const drawMarkers = (): void => {
   TIME && console.time("drawMarkers");
-
-  const rescale = +markers.attr("rescale");
-  const pinned = +markers.attr("pinned");
-
-  const markersData: Marker[] = pinned
-    ? (pack.markers || []).filter((marker: Marker) => marker.pinned)
-    : pack.markers || [];
-  const html = markersData.map(marker => markerRenderer(marker, rescale));
-  markers.html(html.join(""));
-
+  layer.render();
   TIME && console.timeEnd("drawMarkers");
 };
 
-window.drawMarkers = markersRenderer;
-window.drawMarker = markerRenderer;
-window.getPin = getPinForShape;
+function reconcileMarkers({ root, bounds }: ViewportRenderContext): void {
+  const container = root.querySelector<SVGGElement>("#markers");
+  if (!container || !Layers.isOn("markers")) return;
+
+  const rescale = styles.markers.options.rescale;
+  const anyPinned = pack.markers.some(marker => marker.pinned);
+  const selected = root === document && editedMarker ? container.querySelector(`#marker${editedMarker.i}`) : null;
+  const markup: string[] = [];
+  let selectedMarkup = "";
+
+  for (const marker of pack.markers) {
+    const edited = root === document && marker === editedMarker;
+    if (marker.hidden) continue;
+    if (!edited && ((anyPinned && !marker.pinned) || (visibleMarkerIds && !visibleMarkerIds.has(marker.i)))) continue;
+    const { x, y, size } = getMarkerGeometry(marker, rescale, bounds.scale);
+    if (!edited && (x > bounds.x1 || y > bounds.y1 || x + size < bounds.x0 || y + size < bounds.y0)) continue;
+    const html = /*html*/ `<svg id="marker${marker.i}" viewBox="0 0 30 30" width="${size}" height="${size}" x="${x}" y="${y}">${getMarkerContent(marker)}</svg>`;
+    if (edited) selectedMarkup = html;
+    else markup.push(html);
+  }
+
+  markup.push(selectedMarkup);
+  container.innerHTML = markup.join("");
+
+  // Preserve the edited SVG's drag handlers while replacing its rendered content.
+  if (selected && selectedMarkup) {
+    const rendered = container.lastElementChild!;
+    for (const { name, value } of Array.from(rendered.attributes)) selected.setAttribute(name, value);
+    selected.replaceChildren(...rendered.childNodes);
+    rendered.replaceWith(selected);
+  }
+}
+
+function getMarkerGeometry({ x, y, size = 30 }: Marker, rescale: number, scale: number) {
+  const zoomSize = rescale ? Math.max(rn(size / 5 + 24 / scale, 2), 1) : size;
+  return { x: rn(x - zoomSize / 2, 1), y: rn(y - zoomSize, 1), size: zoomSize };
+}
+
+function getMarkerContent({ icon, dx = 50, dy = 50, px = 12, pin, fill, stroke }: Marker): string {
+  const isExternal = isImageIcon(icon);
+  return /* html */ `
+      <g>${getPin(pin, fill, stroke)}</g>
+      <text x="${dx}%" y="${dy}%" font-size="${px}px" >${isExternal ? "" : escapeHtml(icon)}</text>
+      <image x="${dx / 2}%" y="${dy / 2}%" width="${px}px" height="${px}px" href="${isExternal ? escapeHtml(icon) : ""}" />`;
+}

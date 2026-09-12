@@ -1,70 +1,197 @@
-import { pointer, select } from "d3";
+import { select } from "d3";
+import {
+  closeDialogs,
+  confirmationDialog,
+  destroyDialog,
+  refreshEditors,
+  updateDialog
+} from "@/components/dialog/dialog-helpers";
+import { bindColumnSorting, sortDataByColumns } from "@/components/dialog/sorting";
+import { dialogState } from "@/components/dialog/state";
+import {
+  type EditorColumn,
+  initColumnVisibility,
+  initEditorTable,
+  renderEditorHeader,
+  renderEditorPagination,
+  setModeHiddenColumns,
+  type TableView
+} from "@/components/dialog/table";
+import { Layers } from "@/components/layers";
+import { clearMainTip, tip } from "@/components/tooltips";
+import { applyDefaultViewboxEvents } from "@/components/viewbox-events";
 import { Controllers } from "@/controllers";
+import { Notes } from "@/generators/notes";
+import { downloadFile, getFileName, rn } from "@/utils";
 import type { Good } from "../generators/goods-generator";
 import { isDealRecord, isMfgRecord } from "../generators/production-generator";
-import { drawGoods, toggleGoods } from "../renderers/draw-goods";
-import { ensureEl, unique } from "../utils";
+import { ensureEl, getPointer, unique } from "../utils";
 
-let isInitialized = false;
-const visibleTags = new Set<string>();
+let production: ReturnType<typeof getProduction> = {};
+let stockData: ReturnType<typeof getAllStockData> = {};
 
-function getVisibleCount(): number {
-  return pack.goods.reduce((count, good) => count + (good.visible ? 1 : 0), 0);
-}
+const dialogId = "goodsEditor" as const;
+const position = { my: "right top", at: "right-10 top+10", of: "svg", collision: "fit" };
+let filterState: { visibleTags: string[] };
 
-function refreshEditor() {
-  goodsEditorAddLines();
-  drawGoods();
-}
+const columns: EditorColumn<Good>[] = [
+  { key: "display", width: "1.6em" },
+  { key: "name", label: "Name", width: "10em", permanent: true, sortBy: good => good.name, sortType: "alpha" },
+  {
+    key: "type",
+    label: "Type",
+    width: "6em",
+    permanent: true,
+    sortBy: good => [good.recipes && "MFG", good.distribution && "RAW"].filter(Boolean).join(","),
+    sortType: "alpha"
+  },
+  {
+    key: "unit",
+    label: "Unit",
+    width: "4em",
+    sortBy: good => good.unit ?? "",
+    sortType: "alpha",
+    tip: "Unit of production. Click to sort"
+  },
+  {
+    key: "produced",
+    label: "Produced",
+    width: "6em",
+    sortBy: good => rn((production[good.i]?.burg ?? 0) + (production[good.i]?.cell ?? 0)),
+    defaultSort: "desc",
+    tip: "Total units produced daily in cells (raw) and burgs (manufactured). Click to sort"
+  },
+  {
+    key: "stock",
+    label: "Stock",
+    width: "6em",
+    sortBy: good => stockData[good.i]?.total ?? 0,
+    marginLeft: ".7em",
+    tip: "Total units in stock across all markets and burg inventories. Click to sort"
+  },
+  {
+    key: "price",
+    label: "Price",
+    width: "4.6em",
+    sortBy: good => good.value,
+    tip: "Base (initial) price. Click to sort"
+  },
+  { key: "note", width: "1.1em" },
+  { key: "edit", width: "1.1em" },
+  { key: "remove", width: "1.4em", permanent: true }
+];
+const goodsTable = initEditorTable<Good>({ getData: getGoodsData, onUpdate: renderGoodsPage });
 
 function open() {
   if (customization) return;
+  filterState = dialogState.get(dialogId, "filters", () => ({ visibleTags: [] as string[] }));
   closeDialogs("#goodsEditor, .stable");
 
-  if (!layerIsOn("toggleGoods")) toggleGoods();
-  else drawGoods();
+  Layers.show("goods");
 
-  goodsEditorAddLines();
+  renderDialog();
+  goodsTable.reset();
 
   $("#goodsEditor").dialog({
     title: "Goods Editor",
     close: closeGoodsEditor,
-    position: { my: "right top", at: "right-10 top+10", of: "svg" }
+    position
   });
-
-  if (!isInitialized) {
-    ensureEl("goodsEditorRefresh").on("click", goodsEditorAddLines);
-    ensureEl("goodsPercentage").on("click", togglePercentageMode);
-    ensureEl("goodsTagsFilter").on("click", openTagsVisibilityDialog);
-    ensureEl("goodsAssign").on("click", enterResourceAssignMode);
-    ensureEl("goodsAdd").on("click", () => Controllers.GoodEditor.open(undefined, refreshEditor));
-    ensureEl("goodsRestore").on("click", goodsRestoreDefaults);
-    ensureEl("goodsExport").on("click", downloadGoodsData);
-    ensureEl("goodsDisplayAll").on("change", toggleAllDisplayed);
-    ensureEl("goodsChains").on("click", () => Controllers.ProductionChains.open());
-    ensureEl("goodsRegenerateGoods").on("click", requestGoodsRegeneration);
-    ensureEl("goodsRegenerateProduction").on("click", requestProductionRegeneration);
-
-    ensureEl("goodsBody").on("click", ev => {
-      const el = ev.target as HTMLElement;
-      const cl = el.classList;
-      const line = el.parentNode as HTMLElement;
-      const good = Goods.get(+line.dataset.id!);
-      if (!good) return;
-      if (cl.contains("goodEdit")) return Controllers.GoodEditor.open(good, refreshEditor);
-      if (cl.contains("goodDisplayed")) return toggleDisplayedGood(good, el as HTMLInputElement);
-      if (cl.contains("icon-trash-empty")) return removeGood(good, line);
-    });
-
-    isInitialized = true;
-  }
 }
 
-function goodsEditorAddLines() {
+function getVisibleCount(goods = pack.goods): number {
+  return goods.reduce((count, good) => count + (good.visible ? 1 : 0), 0);
+}
+
+function refreshEditor() {
+  goodsTable.refresh();
+  Layers.draw("goods");
+}
+
+function renderDialog(): void {
+  destroyDialog("goodsEditor");
+  const editorHtml = /* html */ `<div id="goodsEditor" class="dialog stable editorDialog">
+      ${renderEditorHeader({ dialogId, columns })}
+      <div id="goodsBody" class="table" style="max-height: 50vh;" data-type="absolute"></div>
+      <div id="goodsFooter" class="totalLine hide">
+        <div data-tip="Number of goods (displayed / total)" style="margin-left: 5px">Goods:&nbsp;<span id="goodsDisplayed">0</span> of <span id="goodsNumber">0</span></div>
+        <div data-tip="Total units produced daily by all cells and burgs" style="margin-left: 12px">Produced:&nbsp;<span id="goodsProduced">0</span></div>
+        <div data-tip="Total units in stock across all markets and burg inventories" style="margin-left: 12px">Stock:&nbsp;<span id="goodsStock">0</span></div>
+      </div>
+      <div id="goodsBottom">
+        <button id="goodsEditorRefresh" data-tip="Refresh the Editor" class="icon-cw"></button>
+        <button
+          id="goodsPercentage"
+          data-tip="Toggle percentage / absolute values display mode"
+          class="icon-percent"
+        ></button>
+        <button id="goodsTagsFilter" data-tip="Filter visible goods by tags" class="icon-tags"></button>
+        <button id="goodsAssign" data-tip="Manually assign goods to cells" class="icon-brush"></button>
+        <button id="goodsAdd" data-tip="Add a new good" class="icon-plus hide"></button>
+        <button id="goodsRegenerateGoods" data-tip="Regenerate bonus goods placement" class="icon-arrows-cw hide"></button>
+        <button id="goodsRegenerateProduction" data-tip="Regenerate production and trade deals" class="icon-retweet hide"></button>
+        <button id="goodsChains" data-tip="Show production chains graph" class="icon-chart-line hide"></button>
+        <button
+          id="goodsRestore"
+          data-tip="Restore default list and regenerate goods"
+          class="icon-history hide"
+        ></button>
+        <button id="goodsExport" data-tip="Download goods-related data" class="icon-download hide"></button>
+      </div>
+    </div>`;
+  ensureEl("dialogs").insertAdjacentHTML("beforeend", editorHtml);
+  ensureEl("goodsTagsFilter").classList.toggle("active", filterState.visibleTags.length > 0);
+  ensureEl(`${dialogId}Header`).querySelector<HTMLElement>('[data-col="display"]')!.innerHTML = /* html */ `<input
+    type="checkbox" data-tip="Show or hide all goods matching the current filter" class="native" id="goodsDisplayAll"
+    style="margin: 0; width: 1.2em;" />`;
+  bindColumnSorting(dialogId, goodsTable.reset);
+  initColumnVisibility({
+    dialogId,
+    columns,
+    onUpdate: () => updateDialog(dialogId, { width: "fit-content", position })
+  });
+
+  ensureEl("goodsEditorRefresh").addEventListener("click", goodsTable.refresh);
+  ensureEl("goodsPercentage").addEventListener("click", togglePercentageMode);
+  ensureEl("goodsTagsFilter").addEventListener("click", openTagsVisibilityDialog);
+  ensureEl("goodsAssign").addEventListener("click", enterResourceAssignMode);
+  ensureEl("goodsAdd").addEventListener("click", () => Controllers.GoodEditor.open(undefined, refreshEditor));
+  ensureEl("goodsRestore").addEventListener("click", goodsRestoreDefaults);
+  ensureEl("goodsExport").addEventListener("click", downloadGoodsData);
+  ensureEl("goodsDisplayAll").addEventListener("change", toggleAllDisplayed);
+  ensureEl("goodsChains").addEventListener("click", () => Controllers.ProductionChains.open());
+  ensureEl("goodsRegenerateGoods").addEventListener("click", requestGoodsRegeneration);
+  ensureEl("goodsRegenerateProduction").addEventListener("click", requestProductionRegeneration);
+
+  ensureEl("goodsBody").addEventListener("click", ev => {
+    const el = ev.target as HTMLElement;
+    const cl = el.classList;
+    const line = el.closest<HTMLElement>(".states");
+    if (!line) return;
+    const good = Goods.get(+line.dataset.id!);
+    if (!good) return;
+    if (cl.contains("icon-book")) return void Controllers.NotesEditor.open({ type: "good", id: good.i });
+    if (cl.contains("goodEdit")) return Controllers.GoodEditor.open(good, refreshEditor);
+    if (cl.contains("goodDisplayed")) return toggleDisplayedGood(good, el as HTMLInputElement);
+    if (cl.contains("icon-trash-empty")) return removeGood(good);
+  });
+}
+
+function getGoodsData(): Good[] {
+  production = getProduction();
+  stockData = getAllStockData();
+  const hasFilter = filterState.visibleTags.length > 0;
+  const goods = hasFilter
+    ? pack.goods.filter(good => good.tags?.some(tag => filterState.visibleTags.includes(tag)))
+    : [...pack.goods];
+  return sortDataByColumns(dialogId, goods, columns);
+}
+
+function renderGoodsPage(view: TableView<Good>) {
   const body = ensureEl("goodsBody");
-  const production = getProduction();
-  const stockData = getAllStockData();
-  let lines = "";
+  const percentage = body.dataset.type === "percentage";
+  const totalProduced = Object.values(production).reduce((sum, value) => sum + value.burg + value.cell, 0);
+  const totalStock = Object.values(stockData).reduce((sum, value) => sum + value.total, 0);
 
   const renderTypeBadge = (type: string) => {
     const commonStyles =
@@ -74,52 +201,50 @@ function goodsEditorAddLines() {
     return `<span style="${commonStyles};background:#f8e7bf;color:#b67a00" data-tip="Manufactured goods are produced in burgs">MFG</span>`;
   };
 
-  for (const good of pack.goods) {
-    const types = [good.recipes && "MFG", good.distribution && "RAW"].filter(Boolean) as string[];
-    const goodProduction = production[good.i] || { burg: 0, cell: 0 };
-    const produced = rn(goodProduction.burg + goodProduction.cell);
-    const producedTip = `Good daily production: ${produced}⚒. Cells: ${rn(goodProduction.cell, 2)}⚒. Burgs: ${rn(goodProduction.burg, 2)}⚒`;
-    const stock = rn(stockData[good.i]?.total ?? 0);
-    const stockTip = `Total stock in all markets and burg inventories: ${stock} units`;
+  const lines = view.rows
+    .map(good => {
+      const types = [good.recipes && "MFG", good.distribution && "RAW"].filter(Boolean) as string[];
+      const goodProduction = production[good.i] || { burg: 0, cell: 0 };
+      const produced = rn(goodProduction.burg + goodProduction.cell);
+      const producedTip = `Good daily production: ${produced}⚒. Cells: ${rn(goodProduction.cell, 2)}⚒. Burgs: ${rn(goodProduction.burg, 2)}⚒`;
+      const stock = rn(stockData[good.i]?.total ?? 0);
+      const stockTip = `Total stock in all markets and burg inventories: ${stock} units`;
 
-    lines += /*html*/ `<div class="states goods" data-id=${good.i} data-name="${good.name}" data-color="${good.color}" data-baseprice="${good.value}" data-produced="${produced}" data-stock="${stock}" data-type="${types.join(",")}" data-unit="${good.unit ?? ""}" data-tags="${good.tags?.join(",")}">
-        <input type="checkbox" data-tip="Toggle this good on the Goods map" class="native goodDisplayed hide" style="padding: 0; margin: 0; vertical-align: middle; width: 1.2em;" ${good.visible ? "checked" : ""} />
-        <svg data-tip="Good icon" width="2em" height="2em" class="goodIcon">
+      return /*html*/ `<div class="states goods" data-id=${good.i} data-produced="${produced}" data-stock="${stock}">
+        <div data-col="display"><input type="checkbox" data-tip="Toggle this good on the Goods map" class="native goodDisplayed" style="margin: 0; width: 1.2em;" ${good.visible ? "checked" : ""} /></div>
+        <div data-col="name" style="display:flex; align-items:center"><svg data-tip="Good icon" width="2em" height="2em" class="goodIcon">
           <circle cx="50%" cy="50%" r="42%" fill="${good.color}" stroke="${Goods.getStroke(good.color)}"/>
           <use href="#${good.icon}" x="10%" y="10%" width="80%" height="80%"/>
-        </svg>
-        <div data-tip="Good name" class="goodName">${good.name}</div>
-        <div data-tip="Good types" class="goodType" style="width: 6em;">${types.map(renderTypeBadge).join(" ")}</div>
-        <div data-tip="Unit of production" class="goodUnit hide">${good.unit ?? ""}</div>
-        <div data-tip="${producedTip}. Click to see burgs producing this good" class="goodProduced pointer hide" style="vertical-align: middle;">
-          <div style="display: inline-block;">${produced}</div>
+        </svg><span data-tip="Good name" class="goodName">${good.name}</span></div>
+        <div data-col="type" data-tip="Good types" class="goodType">${types.map(renderTypeBadge).join(" ")}</div>
+        <div data-col="unit" data-tip="Unit of production" class="goodUnit">${good.unit ?? ""}</div>
+        <div data-col="produced" data-tip="${producedTip}. Click to see burgs producing this good" class="goodProduced pointer" style="text-align: right">
+          <div style="display: inline-block; width: 3em">${percentage ? `${rn(totalProduced ? (produced / totalProduced) * 100 : 0, 2)}%` : produced}</div>
           <div style="display: inline-block; width: 0.4em; font-size: 1.5em;">⚒</div>
         </div>
-        <div data-tip="${stockTip}. Click to see breakdown by location" class="goodStock pointer hide" style="vertical-align: middle;">
-          <div style="display: inline-block;">${stock}</div>
+        <div data-col="stock" data-tip="${stockTip}. Click to see breakdown by location" class="goodStock pointer" style="text-align: right">
+          <div style="display: inline-block; width: 3em">${percentage ? `${rn(totalStock ? (stock / totalStock) * 100 : 0, 2)}%` : stock}</div>
           <div style="display: inline-block; width: 0.4em; font-size: 1.2em;">⛁</div>
         </div>
-        <div data-tip="Base (initial) price. Click to compare prices across markets" class="goodBasePrice pointer hide">🟡 ${good.value}</div>
-        <span data-tip="Edit good" class="icon-pencil goodEdit hide"></span>
-        <span data-tip="Remove good" class="icon-trash-empty hide goodRemove"></span>
+        <div data-col="price" data-tip="Base (initial) price. Click to compare prices across markets" class="goodBasePrice pointer">🟡 ${good.value}</div>
+        ${Notes.getIcon("this good")}
+        <span data-col="edit" data-tip="Edit good" class="icon-pencil goodEdit"></span>
+        <span data-col="remove" data-tip="Remove good" class="icon-trash-empty goodRemove"></span>
       </div>`;
-  }
-  body.innerHTML = lines;
+    })
+    .join("");
+  body.innerHTML = lines || "No goods available";
 
-  const totalProduced = Object.values(production)
-    .map(p => p.burg + p.cell)
-    .reduce((sum, v) => sum + v, 0);
-  const totalStock = Object.values(stockData).reduce((sum, d) => sum + d.total, 0);
-  ensureEl("goodsDisplayed").innerHTML = String(getVisibleCount());
   ensureEl("goodsNumber").innerHTML = String(pack.goods.length);
   ensureEl("goodsProduced").innerHTML = String(rn(totalProduced));
   ensureEl("goodsStock").innerHTML = String(rn(totalStock));
+  renderEditorPagination(ensureEl("goodsFooter"), view, goodsTable.goto);
 
-  body.querySelectorAll("div.states").forEach(el => void el.on("click", selectResourceOnLineClick));
+  body.querySelectorAll("div.states").forEach(el => void el.addEventListener("click", selectResourceOnLineClick));
   body.querySelectorAll<HTMLButtonElement>(".goodProduced").forEach(el => {
     el.addEventListener("click", ev => {
       ev.stopPropagation();
-      openProducersDialog(Number(el.parentElement?.dataset?.id));
+      openProducersDialog(Number(el.closest<HTMLElement>(".states")?.dataset.id));
     });
   });
 
@@ -139,14 +264,8 @@ function goodsEditorAddLines() {
     });
   });
 
-  if (body.dataset.type === "percentage") {
-    body.dataset.type = "absolute";
-    togglePercentageMode();
-  }
   updateDisplayAllCheckbox();
-  applySorting(ensureEl("goodsHeader")!);
-  applyTagVisibilityFilter();
-  $("#goodsEditor").dialog({ width: fitContent() });
+  updateDialog(dialogId, { width: "fit-content", position });
 }
 
 function openProducersDialog(goodId: number) {
@@ -180,7 +299,7 @@ function openProducersDialog(goodId: number) {
       .join("");
     alertMessage.innerHTML = header + rows;
     alertMessage.querySelectorAll<HTMLElement>(".states").forEach(row => {
-      row.on("click", () => {
+      row.addEventListener("click", () => {
         zoomTo(Number(row.dataset.x), Number(row.dataset.y), 8, 2000);
       });
     });
@@ -293,7 +412,7 @@ function openStockDialog(goodId: number) {
       .join("");
     alertMessage.innerHTML = header + rows;
     alertMessage.querySelectorAll<HTMLElement>(".states").forEach(row => {
-      row.on("click", () => {
+      row.addEventListener("click", () => {
         zoomTo(Number(row.dataset.x), Number(row.dataset.y), 8, 2000);
       });
     });
@@ -341,7 +460,7 @@ function getProduction() {
 function openTagsVisibilityDialog() {
   const tags = unique(pack.goods.flatMap(good => good.tags));
   const renderTag = (tag: string) =>
-    `<label style="display: flex; align-items: center;"><input type="checkbox" class="native" value="${tag}" ${visibleTags.has(tag) ? "checked" : ""} /> ${tag}</label>`;
+    `<label style="display: flex; align-items: center;"><input type="checkbox" class="native" value="${tag}" ${filterState.visibleTags.includes(tag) ? "checked" : ""} /> ${tag}</label>`;
   const tagsMarkup = tags.length ? tags.map(renderTag).join("") : '<div style="color:#666">No tags available</div>';
 
   alertMessage.innerHTML = `
@@ -356,14 +475,15 @@ function openTagsVisibilityDialog() {
         $(this).dialog("close");
       },
       "Clear filter": function () {
-        visibleTags.clear();
+        filterState.visibleTags = [];
+        dialogState.set(dialogId, "filters", filterState);
         applyTagVisibilityFilter();
         $(this).dialog("close");
       },
       Apply: function () {
         const checks = Array.from(alertMessage.querySelectorAll<HTMLInputElement>("input[type=checkbox]:checked"));
-        visibleTags.clear();
-        checks.forEach(check => void visibleTags.add(check.value));
+        filterState.visibleTags = checks.map(check => check.value);
+        dialogState.set(dialogId, "filters", filterState);
         applyTagVisibilityFilter();
         $(this).dialog("close");
       }
@@ -372,17 +492,9 @@ function openTagsVisibilityDialog() {
 }
 
 function applyTagVisibilityFilter() {
-  const body = ensureEl("goodsBody");
-  const hasFilter = visibleTags.size > 0;
-
-  body.querySelectorAll<HTMLElement>(":scope > div.states").forEach(line => {
-    const lineTags = line.dataset.tags?.split(",") || [];
-    const matches = !hasFilter || lineTags.some(tag => visibleTags.has(tag));
-    line.classList.toggle("hidden", !matches);
-  });
-
-  const filterBtn = ensureEl("goodsTagsFilter");
-  if (filterBtn) filterBtn.classList.toggle("active", hasFilter);
+  const hasFilter = filterState.visibleTags.length > 0;
+  ensureEl("goodsTagsFilter").classList.toggle("active", hasFilter);
+  goodsTable.reset();
 }
 
 function goodsRestoreDefaults() {
@@ -393,59 +505,34 @@ function goodsRestoreDefaults() {
     onConfirm: () => {
       Goods.restoreDefaults();
       Goods.generate();
-      regenerateEconomy();
+      Production.regenerateEconomy();
+      Layers.draw("markets", "goods");
+      Layers.draw("trade");
+      refreshEditors();
     }
   });
 }
 
 function togglePercentageMode() {
   const body = ensureEl("goodsBody");
-  if (body.dataset.type === "absolute") {
-    body.dataset.type = "percentage";
-    let totalProduced = 0;
-    let totalStock = 0;
-
-    body.querySelectorAll<HTMLElement>(":scope > div").forEach(el => {
-      totalProduced += +el.dataset.produced! || 0;
-      totalStock += +el.dataset.stock! || 0;
-    });
-
-    body.querySelectorAll<HTMLElement>(":scope > div").forEach(el => {
-      const producedEl = el.querySelector<HTMLElement>(".goodProduced");
-      if (producedEl) {
-        const produced = +el.dataset.produced! || 0;
-        producedEl.innerHTML = `${rn(totalProduced ? (produced / totalProduced) * 100 : 0, 2)}%`;
-      }
-      const stockEl = el.querySelector<HTMLElement>(".goodStock");
-      if (stockEl) {
-        const stock = +el.dataset.stock! || 0;
-        stockEl.innerHTML = `${rn(totalStock ? (stock / totalStock) * 100 : 0, 2)}%`;
-      }
-    });
-  } else {
-    body.dataset.type = "absolute";
-    goodsEditorAddLines();
-  }
+  body.dataset.type = body.dataset.type === "absolute" ? "percentage" : "absolute";
+  goodsTable.refresh();
 }
 
 function enterResourceAssignMode(this: HTMLElement) {
   if (this.classList.contains("pressed")) return exitResourceAssignMode();
   customization = 14;
   this.classList.add("pressed");
-  if (!layerIsOn("toggleGoods")) toggleGoods();
-  if (!layerIsOn("toggleCells")) {
-    ensureEl<HTMLButtonElement>("toggleCells").dataset.forced = "true";
-    toggleCells();
+  Layers.show("goods");
+  if (!Layers.isOn("cells")) {
+    Layers.show("cells");
+    isCellsLayerForced = true;
   }
 
-  ensureEl("goodsEditor")
-    .querySelectorAll(".hide")
-    .forEach(el => {
-      el.classList.add("hidden");
-    });
-  ensureEl("goodsHeader").style = "grid-template-columns: 7.5em 6em; margin-left: 22px;";
+  setModeHiddenColumns(dialogId, ["display", "unit", "produced", "stock", "price", "note", "edit", "remove"]);
+  ensureEl("goodsFooter").style.display = "none";
 
-  $("#goodsEditor").dialog({ position: { my: "right top", at: "right-10 top+10", of: "svg", collision: "fit" } });
+  updateDialog(dialogId, { position });
 
   tip("Select good line in editor, click on cells to remove or add a bonus resource", true);
   select<SVGElement, unknown>("#viewbox").on("click", changeResourceOnCellClick);
@@ -460,8 +547,8 @@ function selectResourceOnLineClick(this: HTMLElement) {
 
 function changeResourceOnCellClick(this: SVGElement, event: MouseEvent) {
   const body = ensureEl("goodsBody");
-  const point = pointer(event, this);
-  const cellId = findCell(...point);
+  const point = getPointer(event, this);
+  const cellId = Pack.findCell(...point);
   if (cellId === undefined) return;
 
   const selected = body.querySelector<HTMLElement>("div.selected");
@@ -477,28 +564,27 @@ function changeResourceOnCellClick(this: SVGElement, event: MouseEvent) {
     resource.visible = true;
   }
 
-  drawGoods();
+  Layers.draw("goods");
 }
+
+let isCellsLayerForced = false; // the cells layer is turned on for the assignment mode
 
 function exitResourceAssignMode(close?: string) {
   const body = ensureEl("goodsBody");
   customization = 0;
   ensureEl("goodsAssign").classList.remove("pressed");
 
-  if (layerIsOn("toggleCells")) {
-    const toggler = ensureEl<HTMLButtonElement>("toggleCells");
-    if (toggler.dataset.forced) toggleCells();
-    delete toggler.dataset.forced;
+  if (isCellsLayerForced) {
+    Layers.hide("cells");
+    isCellsLayerForced = false;
   }
 
-  ensureEl("goodsEditor")
-    .querySelectorAll(".hide")
-    .forEach(el => void el.classList.remove("hidden"));
-  ensureEl("goodsHeader").style = "grid-template-columns: 4em 7.4em 6em 5em 6.8em 6em 4.6em 1.6em;";
+  setModeHiddenColumns(dialogId, []);
+  ensureEl("goodsFooter").style.display = "";
 
-  if (!close) goodsEditorAddLines();
+  if (!close) goodsTable.refresh();
 
-  restoreDefaultEvents();
+  applyDefaultViewboxEvents();
   clearMainTip();
   const selected = body.querySelector("div.selected");
   if (selected) selected.classList.remove("selected");
@@ -537,12 +623,12 @@ function toggleDisplayedGood(good: Good, el: HTMLInputElement) {
   good.visible = el.checked;
 
   updateDisplayAllCheckbox();
-  drawGoods();
+  Layers.draw("goods");
 }
 
 function toggleAllDisplayed(this: HTMLInputElement) {
   const checked = this.checked;
-  for (const good of pack.goods) good.visible = checked;
+  for (const good of goodsTable.view().all) good.visible = checked;
 
   ensureEl("goodsBody")
     .querySelectorAll<HTMLInputElement>(".goodDisplayed")
@@ -550,16 +636,19 @@ function toggleAllDisplayed(this: HTMLInputElement) {
       checkbox.checked = checked;
     });
 
-  drawGoods();
+  updateDisplayAllCheckbox();
+  Layers.draw("goods");
 }
 
 function updateDisplayAllCheckbox() {
   const master = ensureEl<HTMLInputElement>("goodsDisplayAll");
-  const total = pack.goods.length;
-  const visibleCount = getVisibleCount();
+  const goods = goodsTable.view().all;
+  const total = goods.length;
+  const visibleCount = getVisibleCount(goods);
+  master.disabled = total === 0;
   master.checked = total > 0 && visibleCount === total;
   master.indeterminate = visibleCount > 0 && visibleCount < total;
-  ensureEl("goodsDisplayed").innerHTML = String(visibleCount);
+  ensureEl("goodsDisplayed").innerHTML = String(getVisibleCount());
 }
 
 function requestGoodsRegeneration() {
@@ -568,7 +657,11 @@ function requestGoodsRegeneration() {
     message:
       "Are you sure you want to regenerate bonus goods placement? Generation will be based on the current Goods settings and won't affect production or trade",
     confirm: "Regenerate",
-    onConfirm: window.regenerateGoods
+    onConfirm: () => {
+      Goods.regenerate();
+      Layers.draw("goods");
+      refreshEditors();
+    }
   });
 }
 
@@ -578,11 +671,16 @@ function requestProductionRegeneration() {
     message:
       "Are you sure you want to regenerate production and trade for all goods? Generation will be based on the current Goods settings and bonus goods placement",
     confirm: "Regenerate",
-    onConfirm: window.regenerateProduction
+    onConfirm: () => {
+      Production.regenerate();
+      Layers.draw("goods");
+      Layers.draw("trade");
+      refreshEditors();
+    }
   });
 }
 
-function removeGood(good: Good, line: HTMLElement) {
+function removeGood(good: Good) {
   const message = "Are you sure you want to remove the resource? <br>This action cannot be reverted";
   const onConfirm = () => {
     for (const i of pack.cells.i) {
@@ -593,18 +691,16 @@ function removeGood(good: Good, line: HTMLElement) {
 
     pack.goods = pack.goods.filter(g => g.i !== good.i);
     Goods.sync();
-    line.remove();
-    ensureEl("goodsNumber").innerHTML = String(pack.goods.length);
-
-    updateDisplayAllCheckbox();
-    drawGoods();
+    goodsTable.refresh();
+    Layers.draw("goods");
   };
   confirmationDialog({ title: "Remove resource", message, confirm: "Remove", onConfirm });
 }
 
 function closeGoodsEditor() {
   if (customization === 14) exitResourceAssignMode("close");
-  ensureEl("goodsBody").innerHTML = "";
+  $("#goodsEditor").dialog("destroy");
+  ensureEl("goodsEditor").remove();
 }
 
 export const GoodsEditor = { open };

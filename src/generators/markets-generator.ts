@@ -1,5 +1,6 @@
 import Alea from "alea";
 import { quadtree } from "d3-quadtree";
+import { rn } from "@/utils";
 import { minmax } from "../utils";
 import { getColors, getRandomColor } from "../utils/colorUtils";
 import type { Burg } from "./burgs-generator";
@@ -18,6 +19,7 @@ export type Market = {
   color: string;
   name?: string;
   goods: Record<number, { stock: number; price: number }>;
+  note?: string;
 };
 
 export type Deal = {
@@ -35,16 +37,18 @@ export type Deal = {
 export class MarketsModule {
   private marketById: Market[] = [];
 
+  regenerate(): Market[] {
+    return this.generate(true);
+  }
+
   generate(regenerate: boolean = false): Market[] {
-    TIME && console.time("generateMarkets");
-    if (!regenerate) Math.random = Alea(seed);
+    if (!regenerate) Math.random = Alea(options.map.seed);
     const markets = this.createMarkets();
     this.expandMarkets(markets);
 
     pack.markets = markets;
     pack.deals = [];
 
-    TIME && console.timeEnd("generateMarkets");
     return markets;
   }
 
@@ -61,7 +65,7 @@ export class MarketsModule {
       .sort((a, b) => b.score - a.score);
 
     // minSpacing scales with map size relative to burg count
-    let minSpacing = (((graphWidth + graphHeight) * 2) / pack.burgs.length ** 0.6) | 0;
+    let minSpacing = (((options.map.graph.width + options.map.graph.height) * 2) / pack.burgs.length ** 0.6) | 0;
 
     const markets: Market[] = [];
     const tree = quadtree<[number, number, number]>(
@@ -256,7 +260,7 @@ export class MarketsModule {
     if (!burg || burg.removed) return null;
 
     if (pack.markets.some(m => m.centerBurgId === burgId)) {
-      tip("This burg is already a market center", false, "error");
+      window.tip("This burg is already a market center", false, "error");
       return null;
     }
 
@@ -270,6 +274,27 @@ export class MarketsModule {
     pack.cells.market[burg.cell] = marketId;
     burg.market = marketId;
     burg.plaza = 1;
+
+    return market;
+  }
+
+  // Move the market center to another burg. Keeps territories, goods, production and deals intact.
+  relocateMarket(marketId: number, newBurgId: number): Market | null {
+    const market = this.get(marketId);
+    if (!market) return null;
+
+    const newCenter = pack.burgs[newBurgId];
+    if (!newCenter || newCenter.removed) return null;
+    if (market.centerBurgId === newBurgId) return null;
+    if (pack.markets.some(m => m.centerBurgId === newBurgId)) return null;
+
+    const oldCenter = pack.burgs[market.centerBurgId];
+    if (oldCenter) oldCenter.plaza = 0;
+
+    market.centerBurgId = newBurgId;
+    pack.cells.market[newCenter.cell] = marketId;
+    newCenter.market = marketId;
+    newCenter.plaza = 1;
 
     return market;
   }
@@ -383,7 +408,7 @@ export class MarketsModule {
     const industrialDemandFactors = this.collectIndustrialDemand(pack.goods, consumerDemandFactors);
     const populationByMarket = this.calculatePopulationByMarket();
 
-    const mapDiagonal = Math.hypot(graphWidth, graphHeight) || 1;
+    const mapDiagonal = Math.hypot(options.map.graph.width, options.map.graph.height) || 1;
     const TRADE_RESERVE_FACTOR = 0.2;
     const MIN_UNIT = 0.1;
     const MIN_PROFIT = 1;

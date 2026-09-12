@@ -8,10 +8,8 @@ describe("MarketsModule", () => {
     beforeEach(() => {
       marketsModule = new MarketsModule();
       globalThis.Markets = marketsModule;
-      globalThis.graphWidth = 1000;
-      globalThis.graphHeight = 800;
+      options.map.graph = { width: 1000, height: 800, points: 10000 };
       globalThis.TIME = false;
-      globalThis.rn = (v: number, _d?: number) => Math.round(v * 100) / 100;
       globalThis.States = {
         getSalesTax: (burg: { state?: number }) => {
           const stateId = burg?.state || 0;
@@ -171,7 +169,7 @@ describe("MarketsModule", () => {
       marketsModule["marketById"] = [market1];
       globalThis.pack.burgs = [{ i: 0 } as any, { i: 1, cell: 0 } as any];
       globalThis.pack.cells = { i: [0], market: Uint16Array.from([1]) } as any;
-      globalThis.tip = () => {};
+      window.tip = () => {};
 
       expect(marketsModule.addMarket(1)).toBeNull();
       expect(globalThis.pack.markets).toHaveLength(1);

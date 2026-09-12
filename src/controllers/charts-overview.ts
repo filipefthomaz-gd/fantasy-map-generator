@@ -17,6 +17,9 @@ import {
   stackOrderNone,
   sum
 } from "d3";
+import { closeDialogs, updateDialog } from "@/components/dialog/dialog-helpers";
+import { tip } from "@/components/tooltips";
+import { downloadFile, getArea, getAreaUnit, getFileName, getHeight, getPrecipitation } from "@/utils";
 import { capitalize, convertTemperature, ensureEl, formatPrice, isWater, rn, si } from "../utils";
 
 interface Dimension {
@@ -353,24 +356,18 @@ const plotTypeMap: Record<
 };
 
 let charts: ChartOptions[] = [];
-let prevMapId: number | undefined;
-let isInitialized = false;
-
+let chartedMap: number | undefined; // the map the charts were built for, by its creation stamp
 function open() {
-  if (!isInitialized) {
-    appendStyleSheet();
-    insertHtml();
-    addListeners();
-    changeViewColumns();
-    updateMetricInfo();
-    isInitialized = true;
-  }
+  renderDialog();
+  changeViewColumns();
+  updateMetricInfo();
 
   closeDialogs("#chartsOverview, .stable");
 
-  if (prevMapId !== mapId) {
+  const currentMap = mapHistory.at(-1)?.created;
+  if (chartedMap !== currentMap) {
     charts = [];
-    prevMapId = mapId;
+    chartedMap = currentMap;
   }
 
   if (!charts.length) addChart();
@@ -385,71 +382,8 @@ function open() {
   });
 }
 
-function appendStyleSheet() {
-  const style = document.createElement("style");
-  style.textContent = /* css */ `
-    #chartsOverview {
-      max-width: 90vw !important;
-      max-height: 90vh !important;
-      overflow: hidden;
-      display: grid;
-      grid-template-rows: auto 1fr;
-    }
-
-    #chartsOverview__form {
-      display: grid;
-      font-size: 1.1em;
-      margin: 0.3em 0;
-    }
-
-    #chartsOverview__form > div:first-child {
-      display: flex;
-      align-items: center;
-      gap: 0.2em;
-    }
-
-    #chartsOverview__form > div:nth-child(2) {
-      display: flex;
-      align-items: center;
-      gap: 1em;
-    }
-
-    #chartsOverview__form label {
-      display: inline-flex;
-      align-items: center;
-    }
-
-    #chartsOverview__charts {
-      overflow: auto;
-      scroll-behavior: smooth;
-      display: grid;
-    }
-
-    #chartsOverview__charts figure {
-      margin: 0;
-      padding: 0.6em 0 1em;
-      border-top: 1px solid rgba(128, 128, 128, 0.4);
-    }
-
-    #chartsOverview__charts figcaption {
-      font-size: 1.2em;
-      margin: 0 1% 0.4em 4%;
-      display: grid;
-      align-items: center;
-      grid-template-columns: 1fr auto;
-    }
-
-    #chartsOverview__plotByInfo {
-      margin-left: 0.3em;
-      cursor: help;
-      opacity: 0.6;
-    }
-  `;
-
-  document.head.appendChild(style);
-}
-
-function insertHtml() {
+function renderDialog() {
+  document.getElementById("chartsOverview")?.remove();
   const entities = Object.entries(entitiesMap).map(([entity, { label }]): [string, string] => [entity, label]);
   const plotBy = Object.entries(quantizationMap).map(([plotBy, { label }]): [string, string] => [plotBy, label]);
 
@@ -525,12 +459,73 @@ function insertHtml() {
   ensureEl<HTMLSelectElement>("chartsOverview__entitiesSelect").value = "states";
   ensureEl<HTMLSelectElement>("chartsOverview__plotBySelect").value = "total_population";
   ensureEl<HTMLSelectElement>("chartsOverview__groupBySelect").value = "cultures";
-}
 
-function addListeners() {
-  ensureEl("chartsOverview__form").on("submit", addChart as EventListener);
-  ensureEl("chartsOverview__viewColumns").on("change", changeViewColumns);
-  ensureEl("chartsOverview__plotBySelect").on("change", updateMetricInfo);
+  ensureEl("chartsOverview__form").addEventListener("submit", addChart as EventListener);
+  ensureEl("chartsOverview__viewColumns").addEventListener("change", changeViewColumns);
+  ensureEl("chartsOverview__plotBySelect").addEventListener("change", updateMetricInfo);
+
+  document.getElementById("chartsOverviewStyle")?.remove();
+  const style = document.createElement("style");
+  style.id = "chartsOverviewStyle";
+  style.textContent = /* css */ `
+    #chartsOverview {
+      max-width: 90vw !important;
+      max-height: 90vh !important;
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    #chartsOverview__form {
+      display: grid;
+      font-size: 1.1em;
+      margin: 0.3em 0;
+    }
+
+    #chartsOverview__form > div:first-child {
+      display: flex;
+      align-items: center;
+      gap: 0.2em;
+    }
+
+    #chartsOverview__form > div:nth-child(2) {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
+
+    #chartsOverview__form label {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    #chartsOverview__charts {
+      overflow: auto;
+      scroll-behavior: smooth;
+      display: grid;
+    }
+
+    #chartsOverview__charts figure {
+      margin: 0;
+      padding: 0.6em 0 1em;
+      border-top: 1px solid rgba(128, 128, 128, 0.4);
+    }
+
+    #chartsOverview__charts figcaption {
+      font-size: 1.2em;
+      margin: 0 1% 0.4em 4%;
+      display: grid;
+      align-items: center;
+      grid-template-columns: 1fr auto;
+    }
+
+    #chartsOverview__plotByInfo {
+      margin-left: 0.3em;
+      cursor: help;
+      opacity: 0.6;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 // Show the selected metric's hint via an info icon tooltip (keeps the dropdown labels compact).
@@ -888,10 +883,10 @@ function insertChart(id: number, sortedData: ChartDatum[], $chart: SVGSVGElement
     updateDialogPosition();
   };
 
-  $figure.querySelector("button.icon-download")?.on("click", downloadChartData);
-  $figure.querySelector("button.icon-export")?.on("click", downloadChartPng);
-  $figure.querySelector("button.icon-chart-bar")?.on("click", downloadChartSvg);
-  $figure.querySelector("button.icon-trash")?.on("click", removeChart);
+  $figure.querySelector("button.icon-download")?.addEventListener("click", downloadChartData);
+  $figure.querySelector("button.icon-export")?.addEventListener("click", downloadChartPng);
+  $figure.querySelector("button.icon-chart-bar")?.addEventListener("click", downloadChartSvg);
+  $figure.querySelector("button.icon-trash")?.addEventListener("click", removeChart);
 }
 
 function changeViewColumns() {
@@ -902,13 +897,13 @@ function changeViewColumns() {
 }
 
 function updateDialogPosition() {
-  $("#chartsOverview").dialog({ position: { my: "center", at: "center", of: "svg" } });
+  updateDialog("chartsOverview", { position: { my: "center", at: "center", of: "svg", collision: "fit" } });
 }
 
 function handleClose() {
-  const $chartContainer = ensureEl("chartsOverview__charts");
-  $chartContainer.innerHTML = "";
   $("#chartsOverview").dialog("destroy");
+  ensureEl("chartsOverview").remove();
+  document.getElementById("chartsOverviewStyle")?.remove();
 }
 
 // config
@@ -942,11 +937,11 @@ function colorsGetter(entity: CollectionKey) {
 }
 
 function biomeNameGetter(i: string | number): string {
-  return biomesData.name[+i] || EMPTY_NAME;
+  return pack.biomes[+i]?.name || EMPTY_NAME;
 }
 
 function biomeColorsGetter(): Record<string, string> {
-  return Object.fromEntries(biomesData.i.map(i => [biomesData.name[i], biomesData.color[i]]));
+  return Object.fromEntries(pack.biomes.map(({ name, color }) => [name, color]));
 }
 
 // markets have no default name, so fall back to the center burg's name
@@ -982,11 +977,11 @@ function getUrbanPopulation(cellId: number): number {
   const burgId = pack.cells.burg[cellId];
   if (!burgId) return 0;
   const populationPoints = pack.burgs[burgId].population || 0;
-  return populationPoints * populationRate * urbanization;
+  return populationPoints * options.map.units.population.scale * options.map.units.population.urbanization.rate;
 }
 
 function getRuralPopulation(cellId: number): number {
-  return pack.cells.pop[cellId] * populationRate;
+  return pack.cells.pop[cellId] * options.map.units.population.scale;
 }
 
 function sortData(data: ChartDatum[], sorting: string): ChartDatum[] {

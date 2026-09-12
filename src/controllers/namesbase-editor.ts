@@ -1,116 +1,210 @@
 import { max as d3max, min as d3min, mean, median } from "d3";
+import { closeDialogs, destroyDialog } from "@/components/dialog/dialog-helpers";
+import { tip } from "@/components/tooltips";
+import { UndoRedo } from "@/services/undo-redo";
+import { downloadFile, escapeHtml, getFileName, speak, uploadFile } from "@/utils";
 import { ensureEl, openURL, rn, unique } from "../utils";
 
 const HISTORY_KEY = "namesbase";
 
-function pushNamesbaseSnapshot(): void {
+function pushSnapshot(): void {
   UndoRedo.push(
     HISTORY_KEY,
-    nameBases.map(b => ({ ...b }))
+    Names.nameBases.map(b => ({ ...b }))
   );
+  syncHistoryButtons();
 }
 
-function restoreNamesbaseSnapshot(snapshot: any[]): void {
-  nameBases.length = 0;
-  nameBases.push(...snapshot);
+function restoreSnapshot(snapshot: typeof Names.nameBases): void {
+  Names.nameBases = snapshot;
   Names.clearChains();
   for (const b of snapshot) Names.updateChain(b.i);
   createBasesList();
   updateInputs();
+  syncHistoryButtons();
 }
 
-addListeners();
+function syncHistoryButtons(): void {
+  ensureEl<HTMLButtonElement>("namesbaseUndo").disabled = !UndoRedo.canUndo(HISTORY_KEY);
+  ensureEl<HTMLButtonElement>("namesbaseRedo").disabled = !UndoRedo.canRedo(HISTORY_KEY);
+}
 
 function open(): void {
   if (customization) return;
   closeDialogs("#namesbaseEditor, .stable");
 
   UndoRedo.register(HISTORY_KEY);
+  renderDialog();
+  syncHistoryButtons();
   createBasesList();
   updateInputs();
-
-  // Add undo/redo buttons to the dialog
-  const undoBtn = ensureEl<HTMLButtonElement>("namesbaseUndo");
-  const redoBtn = ensureEl<HTMLButtonElement>("namesbaseRedo");
-  const syncButtons = () => {
-    undoBtn.disabled = !UndoRedo.canUndo(HISTORY_KEY);
-    redoBtn.disabled = !UndoRedo.canRedo(HISTORY_KEY);
-  };
-  undoBtn.on("click", () => {
-    const snapshot = UndoRedo.undo(
-      HISTORY_KEY,
-      nameBases.map(b => ({ ...b }))
-    );
-    if (snapshot) restoreNamesbaseSnapshot(snapshot);
-    syncButtons();
-  });
-  redoBtn.on("click", () => {
-    const snapshot = UndoRedo.redo(
-      HISTORY_KEY,
-      nameBases.map(b => ({ ...b }))
-    );
-    if (snapshot) restoreNamesbaseSnapshot(snapshot);
-    syncButtons();
-  });
-  syncButtons();
 
   $("#namesbaseEditor").dialog({
     title: "Namesbase Editor",
     width: "60vw",
-    position: { my: "center", at: "center", of: "svg" }
+    position: { my: "center", at: "center", of: "svg" },
+    close: closeNamesbaseEditor
   });
 }
 
-function addListeners(): void {
+function renderDialog(): void {
+  destroyDialog("namesbaseEditor");
+  const editorHtml = /* html */ `<div id="namesbaseEditor" class="dialog stable textual">
+      <div id="namesbaseBasesTop">
+        <span>Select base: </span>
+        <select id="namesbaseSelect" data-tip="Select base to edit" style="width: 12em" value="0"></select>
+        <span style="margin-left: 2px">Names data: </span>
+      </div>
+      <div id="namesbaseBody" style="margin-block: 2px; width: auto">
+        <textarea
+          id="namesbaseTextarea"
+          data-base="0"
+          rows="13"
+          data-tip="Names data: a comma separated list of source names used for names generation"
+          placeholder="Provide a names data: a comma separated list of source names"
+          autocorrect="off"
+          spellcheck="false"
+          style="resize: none"
+        ></textarea>
+        <div>
+          <span>Name: </span>
+          <input
+            id="namesbaseName"
+            data-tip="Type to change a base name"
+            placeholder="Base name"
+            autocorrect="off"
+            spellcheck="false"
+            style="width: 12em"
+          />
+          <span>Length: </span>
+          <input id="namesbaseMin" data-tip="Recommended minimum name length" type="number" min="2" max="100" />
+          <input id="namesbaseMax" data-tip="Recommended maximum name length" type="number" min="2" value="10" />
+          <span>Doubled: </span>
+          <input
+            id="namesbaseDouble"
+            data-tip="Populate with letters that can be used twice in a row (geminates)"
+            autocorrect="off"
+            spellcheck="false"
+            style="width: 10em"
+          />
+        </div>
+        <fieldset>
+          <legend>Generated examples:</legend>
+          <div id="namesbaseExamples" data-tip="Examples. Click to re-generate"></div>
+        </fieldset>
+      </div>
+      <div id="namesbaseBottom">
+        <button
+          id="namesbaseUpdateExamples"
+          data-tip="Re-generate examples based on provided data"
+          class="icon-arrows-cw"
+        ></button>
+        <button id="namesbaseAdd" data-tip="Add new namesbase" class="icon-plus"></button>
+        <button id="namesbaseDefault" data-tip="Restore default namesbase" class="icon-cancel"></button>
+        <button id="namesbaseDownload" data-tip="Download namesbase to PC" class="icon-download"></button>
+        <button
+          id="namesbaseUpload"
+          data-tip="Upload a namesbase from PC, replacing the current set"
+          class="icon-upload"
+        ></button>
+        <button
+          id="namesbaseUploadExtend"
+          data-tip="Upload a namesbase from PC, extending the current set"
+          class="icon-up-circled2"
+        ></button>
+        <button
+          id="namesbaseCA"
+          data-tip="Find or share custom namesbase on Cartography Assets portal"
+          class="icon-drafting-compass"
+        ></button>
+        <button
+          id="namesbaseAnalyze"
+          data-tip="Analyze namesbase to get a validity and quality overview"
+          class="icon-flask"
+        ></button>
+        <button
+          id="namesbaseSpeak"
+          data-tip="Speak the examples. You can change voice and language in options"
+          class="icon-voice"
+        ></button>
+        <button id="namesbaseUndo" data-tip="Undo the last namesbase change" class="icon-ccw"></button>
+        <button id="namesbaseRedo" data-tip="Redo the undone namesbase change" class="icon-cw"></button>
+      </div>
+    </div>`;
+  ensureEl("dialogs").insertAdjacentHTML("beforeend", editorHtml);
+
   const uploader = ensureEl<HTMLInputElement>("namesbaseToLoad");
 
-  ensureEl("namesbaseSelect").on("change", updateInputs);
-  ensureEl("namesbaseTextarea").on("change", updateNamesData);
-  ensureEl("namesbaseUpdateExamples").on("click", updateExamples);
-  ensureEl("namesbaseExamples").on("click", updateExamples);
-  ensureEl("namesbaseName").on("input", e => updateBaseName((e.target as HTMLInputElement).value));
-  ensureEl("namesbaseMin").on("input", e => updateBaseMin((e.target as HTMLInputElement).value));
-  ensureEl("namesbaseMax").on("input", e => updateBaseMax((e.target as HTMLInputElement).value));
-  ensureEl("namesbaseDouble").on("input", e => updateBaseDuplication((e.target as HTMLInputElement).value));
-  ensureEl("namesbaseAdd").on("click", namesbaseAdd);
-  ensureEl("namesbaseAnalyze").on("click", analyzeNamesbase);
-  ensureEl("namesbaseDefault").on("click", namesbaseRestoreDefault);
-  ensureEl("namesbaseDownload").on("click", namesbaseDownload);
-  ensureEl("namesbaseUpload").on("click", () => {
-    uploader.on("change", e => uploadFile(e.target as HTMLInputElement, d => namesbaseUpload(d, true)), { once: true });
-    uploader.click();
-  });
-  ensureEl("namesbaseUploadExtend").on("click", () => {
-    uploader.on("change", e => uploadFile(e.target as HTMLInputElement, d => namesbaseUpload(d, false)), {
+  ensureEl("namesbaseSelect").addEventListener("change", updateInputs);
+  ensureEl("namesbaseTextarea").addEventListener("change", updateNamesData);
+  ensureEl("namesbaseUpdateExamples").addEventListener("click", updateExamples);
+  ensureEl("namesbaseExamples").addEventListener("click", updateExamples);
+  ensureEl("namesbaseName").addEventListener("input", e => updateBaseName((e.target as HTMLInputElement).value));
+  ensureEl("namesbaseMin").addEventListener("input", e => updateBaseMin((e.target as HTMLInputElement).value));
+  ensureEl("namesbaseMax").addEventListener("input", e => updateBaseMax((e.target as HTMLInputElement).value));
+  ensureEl("namesbaseDouble").addEventListener("input", e =>
+    updateBaseDuplication((e.target as HTMLInputElement).value)
+  );
+  ensureEl("namesbaseAdd").addEventListener("click", namesbaseAdd);
+  ensureEl("namesbaseAnalyze").addEventListener("click", analyzeNamesbase);
+  ensureEl("namesbaseDefault").addEventListener("click", namesbaseRestoreDefault);
+  ensureEl("namesbaseDownload").addEventListener("click", namesbaseDownload);
+  ensureEl("namesbaseUpload").addEventListener("click", () => {
+    uploader.addEventListener("change", e => uploadFile(e.target as HTMLInputElement, d => namesbaseUpload(d, true)), {
       once: true
     });
     uploader.click();
   });
-  ensureEl("namesbaseCA").on("click", () =>
+  ensureEl("namesbaseUploadExtend").addEventListener("click", () => {
+    uploader.addEventListener("change", e => uploadFile(e.target as HTMLInputElement, d => namesbaseUpload(d, false)), {
+      once: true
+    });
+    uploader.click();
+  });
+  ensureEl("namesbaseCA").addEventListener("click", () =>
     openURL("https://cartographyassets.com/asset-category/specific-assets/azgaars-generator/namebases/")
   );
-  ensureEl("namesbaseSpeak").on("click", () => speak(ensureEl("namesbaseExamples").textContent ?? ""));
+  ensureEl("namesbaseSpeak").addEventListener("click", () => speak(ensureEl("namesbaseExamples").textContent ?? ""));
+  ensureEl("namesbaseUndo").addEventListener("click", () => {
+    const snapshot = UndoRedo.undo(
+      HISTORY_KEY,
+      Names.nameBases.map(b => ({ ...b }))
+    );
+    if (snapshot) restoreSnapshot(snapshot);
+  });
+  ensureEl("namesbaseRedo").addEventListener("click", () => {
+    const snapshot = UndoRedo.redo(
+      HISTORY_KEY,
+      Names.nameBases.map(b => ({ ...b }))
+    );
+    if (snapshot) restoreSnapshot(snapshot);
+  });
+}
+
+function closeNamesbaseEditor(): void {
+  $("#namesbaseEditor").dialog("destroy");
+  ensureEl("namesbaseEditor").remove();
 }
 
 function createBasesList(): void {
   const select = ensureEl<HTMLSelectElement>("namesbaseSelect");
   select.innerHTML = "";
-  nameBases.forEach((b, i) => {
+  Names.nameBases.forEach((b, i) => {
     select.options.add(new Option(b.name, String(i)));
   });
 }
 
 function updateInputs(): void {
   const base = +ensureEl<HTMLSelectElement>("namesbaseSelect").value;
-  if (!nameBases[base]) {
+  if (!Names.nameBases[base]) {
     tip(`Namesbase ${base} is not defined`, false, "error");
     return;
   }
-  (ensureEl("namesbaseTextarea") as HTMLTextAreaElement).value = nameBases[base].b;
-  (ensureEl("namesbaseName") as HTMLInputElement).value = nameBases[base].name;
-  (ensureEl("namesbaseMin") as HTMLInputElement).value = String(nameBases[base].min);
-  (ensureEl("namesbaseMax") as HTMLInputElement).value = String(nameBases[base].max);
-  (ensureEl("namesbaseDouble") as HTMLInputElement).value = nameBases[base].d;
+  (ensureEl("namesbaseTextarea") as HTMLTextAreaElement).value = Names.nameBases[base].b;
+  (ensureEl("namesbaseName") as HTMLInputElement).value = Names.nameBases[base].name;
+  (ensureEl("namesbaseMin") as HTMLInputElement).value = String(Names.nameBases[base].min);
+  (ensureEl("namesbaseMax") as HTMLInputElement).value = String(Names.nameBases[base].max);
+  (ensureEl("namesbaseDouble") as HTMLInputElement).value = Names.nameBases[base].d;
   updateExamples();
 }
 
@@ -136,9 +230,9 @@ function updateNamesData(): void {
     tip("The names data provided is too short or incorrect", false, "error");
     return;
   }
-  pushNamesbaseSnapshot();
+  pushSnapshot();
   const securedNamesData = input.value.replace(/[/|]/g, "");
-  nameBases[base].b = securedNamesData;
+  Names.nameBases[base].b = securedNamesData;
   input.value = securedNamesData;
   Names.updateChain(base);
 }
@@ -146,36 +240,36 @@ function updateNamesData(): void {
 function updateBaseName(rawName: string): void {
   const base = +ensureEl<HTMLSelectElement>("namesbaseSelect").value;
   const select = ensureEl<HTMLSelectElement>("namesbaseSelect");
-  pushNamesbaseSnapshot();
+  pushSnapshot();
   const name = rawName.replace(/[/|]/g, "");
   select.options[select.selectedIndex].innerHTML = name;
-  nameBases[base].name = name;
+  Names.nameBases[base].name = name;
 }
 
 function updateBaseMin(value: string): void {
   const base = +ensureEl<HTMLSelectElement>("namesbaseSelect").value;
-  if (+value > nameBases[base].max) {
+  if (+value > Names.nameBases[base].max) {
     tip("Minimal length cannot be greater than maximal", false, "error");
     return;
   }
-  pushNamesbaseSnapshot();
-  nameBases[base].min = +value;
+  pushSnapshot();
+  Names.nameBases[base].min = +value;
 }
 
 function updateBaseMax(value: string): void {
   const base = +ensureEl<HTMLSelectElement>("namesbaseSelect").value;
-  if (+value < nameBases[base].min) {
+  if (+value < Names.nameBases[base].min) {
     tip("Maximal length should be greater than minimal", false, "error");
     return;
   }
-  pushNamesbaseSnapshot();
-  nameBases[base].max = +value;
+  pushSnapshot();
+  Names.nameBases[base].max = +value;
 }
 
 function updateBaseDuplication(value: string): void {
   const base = +ensureEl<HTMLSelectElement>("namesbaseSelect").value;
-  pushNamesbaseSnapshot();
-  nameBases[base].d = value;
+  pushSnapshot();
+  Names.nameBases[base].d = value;
 }
 
 function analyzeNamesbase(): void {
@@ -258,11 +352,11 @@ function analyzeNamesbase(): void {
 }
 
 function namesbaseAdd(): void {
-  pushNamesbaseSnapshot();
-  const baseId = nameBases.length;
+  pushSnapshot();
+  const baseId = Names.nameBases.length;
   const b =
     "This,is,an,example,of,name,base,showing,correct,format,It,should,have,at,least,one,hundred,names,separated,with,comma";
-  nameBases.push({
+  Names.nameBases.push({
     name: `Base${baseId}`,
     i: baseId,
     min: 5,
@@ -282,7 +376,6 @@ function namesbaseAdd(): void {
 }
 
 function namesbaseRestoreDefault(): void {
-  pushNamesbaseSnapshot();
   alertMessage.innerHTML = /* html */ `Are you sure you want to restore default namesbase?`;
   $("#alert").dialog({
     resizable: false,
@@ -290,8 +383,9 @@ function namesbaseRestoreDefault(): void {
     buttons: {
       Restore: function () {
         $(this).dialog("close");
+        pushSnapshot();
         Names.clearChains();
-        nameBases = Names.getNameBases();
+        Names.nameBases = Names.getNameBases();
         createBasesList();
         updateInputs();
       },
@@ -303,7 +397,7 @@ function namesbaseRestoreDefault(): void {
 }
 
 function namesbaseDownload(): void {
-  const data = nameBases.map(b => `${b.name}|${b.min}|${b.max}|${b.d}|${b.m}|${b.b}`).join("\r\n");
+  const data = Names.nameBases.map(b => `${b.name}|${b.min}|${b.max}|${b.d}|${b.m}|${b.b}`).join("\r\n");
   const name = `${getFileName("Namesbase")}.txt`;
   downloadFile(data, name);
 }
@@ -319,7 +413,7 @@ function namesbaseUpload(dataLoaded: string, override = true): void {
   }
 
   Names.clearChains();
-  if (override) nameBases = [];
+  if (override) Names.nameBases = [];
 
   const errors: ParseError[] = [];
   lines.forEach((line, index) => {
@@ -329,9 +423,9 @@ function namesbaseUpload(dataLoaded: string, override = true): void {
       if (!name) throw new Error("Name is missing");
       const names = rawNames?.replace(unsafe, "");
       if (!names) throw new Error("Names are missing");
-      nameBases.push({
+      Names.nameBases.push({
         name,
-        i: nameBases.length,
+        i: Names.nameBases.length,
         min: +min,
         max: +max,
         d,
@@ -398,9 +492,6 @@ function namesbaseUpload(dataLoaded: string, override = true): void {
 }
 
 const unsafe = /[|/]/g;
-
-const escapeHtml = (str: string): string =>
-  str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 interface ParseError {
   id: number;

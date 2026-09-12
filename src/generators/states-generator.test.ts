@@ -5,21 +5,16 @@ describe("StatesModule.collectTaxes", () => {
 
   beforeEach(async () => {
     globalThis.TIME = false;
-    globalThis.rn = (v: number, d = 0) => {
-      const m = 10 ** d;
-      return Math.round(v * m) / m;
-    };
     globalThis.window = globalThis.window || ({} as any);
     globalThis.pack = {
       states: [],
       burgs: [],
       markets: [],
-      deals: []
+      deals: [],
+      biomes: []
     } as any;
-    // Stub Names/COA/biomesData not needed for this test
+    // Stub Names/COA data not needed for this test
     globalThis.Names = { getCultureShort: () => "X", getState: () => "X" } as any;
-    globalThis.COA = { generate: () => ({}), getShield: () => "" } as any;
-    globalThis.biomesData = { cost: [] } as any;
     globalThis.FlatQueue = class {
       length = 0;
       pop() {

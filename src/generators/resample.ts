@@ -1,21 +1,15 @@
 import { mean, quadtree } from "d3";
 import { clipPolyline } from "lineclip";
+import { getPointsNumber } from "@/data/graph-density";
+import { Measurers } from "@/generators/measurers-generator";
+import type { GridGraph } from "../types/GridGraph";
+import type { JourneyPoint } from "../types/Journey";
 import type { PackedGraph } from "../types/PackedGraph";
-import {
-  findAllCellsInRadius,
-  findClosestCell,
-  generateGrid,
-  getPolesOfInaccessibility,
-  isWater,
-  rn,
-  unique
-} from "../utils";
+import { getPolesOfInaccessibility, isWater, rn, unique } from "../utils";
 import type { River } from "./river-generator";
 import type { Point } from "./voronoi";
 
-declare global {
-  var Resample: Resampler;
-}
+declare global {}
 
 interface ResamplerProcessOptions {
   projection: (x: number, y: number) => [number, number];
@@ -24,9 +18,8 @@ interface ResamplerProcessOptions {
 }
 
 type ParentMapDefinition = {
-  grid: any;
+  grid: GridGraph;
   pack: PackedGraph;
-  notes: any[];
 };
 
 class Resampler {
@@ -45,7 +38,11 @@ class Resampler {
     });
   }
 
-  private resamplePrimaryGridData(parentMap: ParentMapDefinition, inverse: (x: number, y: number) => [number, number]) {
+  private resamplePrimaryGridData(
+    parentMap: ParentMapDefinition,
+    inverse: (x: number, y: number) => [number, number],
+    scale: number
+  ) {
     grid.cells.h = new Uint8Array(grid.points.length);
     grid.cells.temp = new Int8Array(grid.points.length);
     grid.cells.prec = new Uint8Array(grid.points.length);
@@ -61,8 +58,14 @@ class Resampler {
       grid.cells.temp[newGridCell] = parentMap.grid.cells.temp[parentGridCell];
       grid.cells.prec[newGridCell] = parentMap.grid.cells.prec[parentGridCell];
     });
+
+    if (scale >= 2) {
+      this.addHeightVariation(scale);
+      this.smoothHeightmap();
+    }
   }
 
+  /** submaps copy parent heights, so add noise scaled with the zoom and elevation to avoid flat plateaus */
   private addHeightVariation(scale: number) {
     const maxAmplitude = Math.min(12, Math.round(4 * Math.log2(scale) + 1));
     grid.cells.h.forEach((_: number, cell: number) => {
@@ -93,7 +96,7 @@ class Resampler {
   }
 
   private isInMap(x: number, y: number) {
-    return x >= 0 && x <= graphWidth && y >= 0 && y <= graphHeight;
+    return x >= 0 && x <= options.map.graph.width && y >= 0 && y <= options.map.graph.height;
   }
 
   private restoreCellData(
@@ -101,6 +104,7 @@ class Resampler {
     inverse: (x: number, y: number) => [number, number],
     scale: number
   ) {
+    pack.biomes = parentMap.pack.biomes;
     pack.cells.biome = new Uint8Array(pack.cells.i.length);
     pack.cells.fl = new Uint16Array(pack.cells.i.length);
     pack.cells.s = new Int16Array(pack.cells.i.length);
@@ -147,7 +151,7 @@ class Resampler {
       const burg = pack.burgs[market.centerBurgId];
       return Boolean(burg && !burg.removed);
     });
-    regenerateEconomy();
+    Production.regenerateEconomy();
   }
 
   private restoreRivers(
@@ -171,9 +175,7 @@ class Resampler {
         });
         if (points.length < 2) return null;
 
-        const cells = points
-          .map(point => findClosestCell(...point, Infinity, pack))
-          .filter(cellId => cellId !== undefined);
+        const cells = points.map(point => Pack.findCell(...point)).filter(cellId => cellId !== undefined);
         cells.forEach(cellId => {
           if (pack.cells.r[cellId]) pack.cells.conf[cellId] = 1;
           pack.cells.r[cellId] = river.i;
@@ -193,6 +195,7 @@ class Resampler {
       .filter(river => river !== null);
 
     pack.rivers.forEach(river => {
+      river.parent = Rivers.getParent(river.i);
       river.basin = Rivers.getBasin(river.i);
       river.length = Rivers.getApproximateLength(river.points);
     });
@@ -209,7 +212,7 @@ class Resampler {
       const [xp, yp] = projection(parentCoords[0], parentCoords[1]);
       const [x, y] = [rn(xp, 2), rn(yp, 2)];
       const [centerX, centerY] = this.isInMap(x, y) ? [x, y] : culturePoles[culture.i];
-      const center = findClosestCell(centerX, centerY, Infinity, pack);
+      const center = Pack.findCell(centerX, centerY, Infinity);
       return { ...culture, center };
     });
   }
@@ -254,12 +257,12 @@ class Resampler {
 
     pack.burgs = parentMap.pack.burgs.map(burg => {
       if (!burg.i || burg.removed) return burg;
-      burg.population! *= scale; // adjust for populationRate change
+      burg.population! *= scale; // adjust for options.map.units.population.scale change
 
       const [xp, yp] = projection(burg.x, burg.y);
       if (!this.isInMap(xp, yp)) return { ...burg, removed: true, lock: false };
 
-      const closestCell = findClosestCell(xp, yp, Infinity, pack) as number;
+      const closestCell = Pack.findCell(xp, yp, Infinity) as number;
       const cell = isWater(closestCell, pack) ? (findLandCell(xp, yp) as number) : closestCell;
 
       if (pack.cells.burg[cell]) {
@@ -288,20 +291,16 @@ class Resampler {
 
       const capital = pack.burgs[state.capital];
       const [poleX, poleY] = state.pole as Point;
-      state.center = !capital || capital.removed ? findClosestCell(poleX, poleY, Infinity, pack)! : capital.cell;
+      state.center = !capital || capital.removed ? Pack.findCell(poleX, poleY, Infinity)! : capital.cell;
 
       const military = state.military!.reduce(
         (acc, regiment) => {
           const [xPos, yPos] = projection(regiment.x, regiment.y);
 
-          if (!this.isInMap(xPos, yPos)) {
-            const noteIndex = notes.findIndex(n => n.id === `regiment${state.i}-${regiment.i}`);
-            if (noteIndex !== -1) notes.splice(noteIndex, 1);
-            return acc;
-          }
+          if (!this.isInMap(xPos, yPos)) return acc;
 
           const cellCoords = projection(...parentMap.pack.cells.p[regiment.cell]);
-          const cell = this.isInMap(...cellCoords) ? findClosestCell(...cellCoords, Infinity, pack)! : state.center;
+          const cell = this.isInMap(...cellCoords) ? Pack.findCell(...cellCoords, Infinity)! : state.center;
 
           const [xBase, yBase] = projection(regiment.bx, regiment.by);
           const [xCell, yCell] = pack.cells.p[cell];
@@ -335,12 +334,12 @@ class Resampler {
         });
         if (points.length < 2) return null;
 
-        const bbox: [number, number, number, number] = [0, 0, graphWidth, graphHeight];
+        const bbox: [number, number, number, number] = [0, 0, options.map.graph.width, options.map.graph.height];
         // @types/lineclip is incorrect - lineclip returns Point[][] (array of line segments), not Point[]
         const clippedSegments = clipPolyline(points, bbox) as unknown as Point[][];
         if (!clippedSegments[0]?.length) return null;
         const clipped = clippedSegments[0].map(
-          ([x, y]) => [rn(x, 2), rn(y, 2), findClosestCell(x, y, Infinity, pack) as number] as [number, number, number]
+          ([x, y]) => [rn(x, 2), rn(y, 2), Pack.findCell(x, y, Infinity) as number] as [number, number, number]
         );
         const firstCell = clipped[0][2];
         const feature = pack.cells.f[firstCell];
@@ -362,7 +361,7 @@ class Resampler {
       const [xp, yp] = projection(...parentMap.pack.cells.p[religion.center]);
       const [x, y] = [rn(xp, 2), rn(yp, 2)];
       const [centerX, centerY] = this.isInMap(x, y) ? [x, y] : religionPoles[religion.i];
-      const center = findClosestCell(centerX, centerY, Infinity, pack) as number;
+      const center = Pack.findCell(centerX, centerY, Infinity) as number;
       return { ...religion, center };
     });
   }
@@ -382,7 +381,7 @@ class Resampler {
       if (!province.i || province.removed) return;
       const capital = pack.burgs[province.burg];
       const [poleX, poleY] = province.pole as Point;
-      province.center = !capital?.removed ? capital.cell : findClosestCell(poleX, poleY, Infinity, pack)!;
+      province.center = !capital?.removed ? capital.cell : Pack.findCell(poleX, poleY, Infinity)!;
     });
   }
 
@@ -396,8 +395,10 @@ class Resampler {
       if (parentCell === undefined) return;
       const parentFeature = parentMap.pack.features[parentMap.pack.cells.f[parentCell]];
 
+      if (parentFeature.subtype) feature.subtype = parentFeature.subtype;
       if (parentFeature.group) feature.group = parentFeature.group;
       if (parentFeature.name) feature.name = parentFeature.name;
+      if (parentFeature.note) feature.note = parentFeature.note;
       if (parentFeature.height) feature.height = parentFeature.height;
     });
   }
@@ -408,7 +409,7 @@ class Resampler {
       const [x, y] = projection(marker.x, marker.y);
       if (!this.isInMap(x, y)) Markers.deleteMarker(marker.i);
 
-      const cell = findClosestCell(x, y, Infinity, pack) as number;
+      const cell = Pack.findCell(x, y, Infinity) as number;
       marker.x = rn(x, 2);
       marker.y = rn(y, 2);
       marker.cell = cell;
@@ -426,44 +427,71 @@ class Resampler {
       const cells = zone.cells.flatMap(cellId => {
         const [newX, newY] = projection(...parentMap.pack.cells.p[cellId]);
         if (!this.isInMap(newX, newY)) return [];
-        return findAllCellsInRadius(newX, newY, getSearchRadius(cellId), pack);
+        return Pack.findAll(newX, newY, getSearchRadius(cellId));
       });
 
       return { ...zone, cells: unique(cells) };
     });
   }
 
-  process(options: ResamplerProcessOptions): void {
-    const { projection, inverse, scale } = options;
+  private restoreJourneys(parentMap: ParentMapDefinition, projection: (x: number, y: number) => [number, number]) {
+    let dropped = 0;
+    pack.journeys = (parentMap.pack.journeys ?? [])
+      .map(journey => {
+        const segments = journey.segments
+          .map(seg => {
+            const points: JourneyPoint[] = [];
+            for (const [parentX, parentY] of seg.points) {
+              const [x, y] = projection(parentX, parentY);
+              // a clipped path can't stay valid cell-by-cell, so a segment leaving the map goes whole
+              if (!this.isInMap(x, y)) return null;
+              points.push([rn(x, 2), rn(y, 2), Pack.findCell(x, y, Infinity) as number]);
+            }
+            if (!points.length) return null;
+            return {
+              ...seg,
+              points,
+              from: points[0][2],
+              to: points[points.length - 1][2],
+              distance: Journeys.getPathLength(points)
+            };
+          })
+          .filter(seg => seg !== null);
+        dropped += journey.segments.length - segments.length;
+        if (!segments.length) return null;
+        return { ...journey, segments };
+      })
+      .filter(journey => journey !== null);
+
+    if (dropped) WARN && console.warn(`Resample: dropped ${dropped} journey segment(s) outside the new map`);
+  }
+
+  process(config: ResamplerProcessOptions): void {
+    const { projection, inverse, scale } = config;
     const parentMap = {
       grid: structuredClone(grid),
-      pack: structuredClone(pack),
-      notes: structuredClone(notes)
+      pack: structuredClone(pack)
     };
     const riversData = this.saveRiversData(pack.rivers);
 
-    grid = generateGrid(seed, graphWidth, graphHeight);
+    options.map.graph.points = getPointsNumber(options.generation.graph.density);
+    const { width, height } = options.map.graph;
+    grid = Grid.generate(options.map.seed, width, height);
     pack = {} as PackedGraph;
-    notes = parentMap.notes;
 
-    this.resamplePrimaryGridData(parentMap, inverse);
-    if (scale >= 2) {
-      this.addHeightVariation(scale);
-      this.smoothHeightmap();
-    }
+    this.resamplePrimaryGridData(parentMap, inverse, scale);
 
     Features.markupGrid();
-    addLakesInDeepDepressions();
-    openNearSeaLakes();
+    Grid.addDeepDepressionLakes();
+    Grid.openNearSeaLakes();
 
-    OceanLayers();
-    calculateMapCoordinates();
-    calculateTemperatures();
+    Coordinates.calculate();
+    Temperature.generate();
 
-    reGraph();
+    Pack.generate();
     Features.markupPack();
     Ice.generate();
-    createDefaultRuler();
+    Measurers.createDefaultRuler();
 
     this.restoreCellData(parentMap, inverse, scale);
     this.restoreRivers(riversData, projection, scale);
@@ -476,11 +504,22 @@ class Resampler {
     this.restoreFeatureDetails(parentMap, inverse);
     this.restoreMarkers(parentMap, projection);
     this.restoreZones(parentMap, projection, scale);
+    this.restoreJourneys(parentMap, projection);
     this.restoreEconomy(parentMap);
     Continents.generate();
-
-    showStatistics();
+    for (const state of pack.states) {
+      if (state.label) state.label.pathPoints = undefined;
+    }
+    pack.addedLabels = (parentMap.pack.addedLabels || []).map(addedLabel => {
+      const [x, y] = projection(addedLabel.x, addedLabel.y);
+      return {
+        ...addedLabel,
+        x,
+        y,
+        label: { ...addedLabel.label, pathPoints: addedLabel.label.pathPoints?.map(([x, y]) => projection(x, y)) }
+      };
+    });
   }
 }
 
-window.Resample = new Resampler();
+export const Resample = new Resampler();

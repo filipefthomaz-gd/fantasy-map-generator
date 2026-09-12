@@ -1,11 +1,32 @@
 import type { Selection } from "d3";
 import { select } from "d3";
-import { connectVertices, ensureEl, getBase64, getCoordinates, getGridPolygon, rn, unique } from "@/utils";
+import { Layers } from "@/components/layers";
+import { tip } from "@/components/tooltips";
+import { viewport } from "@/components/viewport";
+import { renderEmblemDefinitions } from "@/renderers/draw-emblems";
+import { drawScaleBar } from "@/renderers/draw-scalebar";
+import { ViewportLayers } from "@/renderers/viewport/viewport-renderer";
+import { getUsedFonts, loadFontsAsDataURI } from "@/services/fonts";
+import { savedMessage } from "@/services/platform";
+import {
+  connectVertices,
+  downloadFile,
+  ensureEl,
+  findEl,
+  getBase64,
+  getCellPopulation,
+  getCoordinates,
+  getFileName,
+  getFriendlyHeight,
+  rn,
+  unique
+} from "@/utils";
 
 type MapSelection = Selection<SVGSVGElement, unknown, null, undefined>;
 
 // project canvas coordinates to geographic [lon, lat], rounded to 4 decimals
-const toGeoCoordinates = (x: number, y: number) => getCoordinates(x, y, mapCoordinates, graphWidth, graphHeight, 4);
+const toGeoCoordinates = (x: number, y: number) =>
+  getCoordinates(x, y, options.map.geography.coordinates, options.map.graph.width, options.map.graph.height, 4);
 
 export interface GetMapURLOptions {
   debug?: boolean;
@@ -27,7 +48,7 @@ async function exportToSvg(): Promise<void> {
     link.href = url;
     link.click();
 
-    const message = `${link.download} is saved. Open 'Downloads' screen (CTRL + J) to check`;
+    const message = savedMessage(link.download);
     tip(message, true, "success", 5000);
   } catch (error) {
     ERROR && console.error(error);
@@ -41,12 +62,12 @@ async function exportToPng(): Promise<void> {
   TIME && console.time("exportToPng");
   try {
     const url = await getMapURL("png");
-    const resolution = ensureEl<HTMLInputElement>("pngResolutionInput").valueAsNumber;
+    const resolution = options.app.export.pngResolution;
     const link = document.createElement("a");
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d")!;
-    canvas.width = svgWidth * resolution;
-    canvas.height = svgHeight * resolution;
+    canvas.width = viewport.width * resolution;
+    canvas.height = viewport.height * resolution;
 
     const blob = await new Promise<Blob>((resolve, reject) => {
       const img = new Image();
@@ -69,7 +90,7 @@ async function exportToPng(): Promise<void> {
       window.URL.revokeObjectURL(link.href);
     }, 1000);
 
-    const message = `${link.download} is saved. Open 'Downloads' screen (CTRL + J) to check. You can set image scale in options`;
+    const message = `${savedMessage(link.download)}. You can set image scale in options`;
     tip(message, true, "success", 5000);
   } catch (error) {
     ERROR && console.error(error);
@@ -83,11 +104,11 @@ async function exportToJpeg(): Promise<void> {
   TIME && console.time("exportToJpeg");
   try {
     const url = await getMapURL("png");
-    const resolution = ensureEl<HTMLInputElement>("pngResolutionInput").valueAsNumber;
+    const resolution = options.app.export.pngResolution;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d")!;
-    canvas.width = svgWidth * resolution;
-    canvas.height = svgHeight * resolution;
+    canvas.width = viewport.width * resolution;
+    canvas.height = viewport.height * resolution;
 
     const quality = Math.min(rn(1 - resolution / 20, 2), 0.92);
     const blob = await new Promise<Blob>((resolve, reject) => {
@@ -111,7 +132,7 @@ async function exportToJpeg(): Promise<void> {
     link.download = `${getFileName()}.jpeg`;
     link.href = window.URL.createObjectURL(blob);
     link.click();
-    tip(`${link.download} is saved. Open "Downloads" screen (CTRL + J) to check`, true, "success", 7000);
+    tip(savedMessage(link.download), true, "success", 7000);
     window.setTimeout(() => window.URL.revokeObjectURL(link.href), 5000);
   } catch (error) {
     ERROR && console.error(error);
@@ -131,8 +152,8 @@ async function exportToPngTiles(): Promise<void> {
 
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d")!;
-  canvas.width = graphWidth;
-  canvas.height = graphHeight;
+  canvas.width = options.map.graph.width;
+  canvas.height = options.map.graph.height;
 
   const imgSchema = new Image();
   imgSchema.src = urlSchema;
@@ -146,15 +167,13 @@ async function exportToPngTiles(): Promise<void> {
 
   // download tiles
   const url = await getMapURL("tiles", { fullMap: true });
-  const tilesX = +ensureEl<HTMLInputElement>("tileColsOutput").value || 2;
-  const tilesY = +ensureEl<HTMLInputElement>("tileRowsOutput").value || 2;
-  const scale = +ensureEl<HTMLInputElement>("tileScaleOutput").value || 1;
+  const { cols: tilesX, rows: tilesY, scale } = options.app.export.tiles;
   const tolesTotal = tilesX * tilesY;
 
-  const tileW = (graphWidth / tilesX) | 0;
-  const tileH = (graphHeight / tilesY) | 0;
+  const tileW = (options.map.graph.width / tilesX) | 0;
+  const tileH = (options.map.graph.height / tilesY) | 0;
 
-  const width = graphWidth * scale;
+  const width = options.map.graph.width * scale;
   const height = width * (tileH / tileW);
   canvas.width = width;
   canvas.height = height;
@@ -170,10 +189,10 @@ async function exportToPngTiles(): Promise<void> {
     return first + last;
   }
 
-  for (let y = 0, row = 0, id = 1; y + tileH <= graphHeight; y += tileH, row++) {
+  for (let y = 0, row = 0, id = 1; y + tileH <= options.map.graph.height; y += tileH, row++) {
     const rowName = getRowLabel(row);
 
-    for (let x = 0, cell = 1; x + tileW <= graphWidth; x += tileW, cell++, id++) {
+    for (let x = 0, cell = 1; x + tileW <= options.map.graph.width; x += tileW, cell++, id++) {
       status.innerHTML = `Rendering tile ${rowName}${cell} (${id} of ${tolesTotal})...`;
       ctx.drawImage(img, x, y, tileW, tileH, 0, 0, width, height);
       const blob = await canvasToBlob(canvas, "image/png");
@@ -193,7 +212,7 @@ async function exportToPngTiles(): Promise<void> {
       link.click();
       link.remove();
 
-      status.innerHTML = 'Done. Check .zip file in "Downloads" (CTRL + J)';
+      status.innerHTML = savedMessage("The .zip file");
       setTimeout(() => URL.revokeObjectURL(link.href), 5000);
     })
     .catch((error: Error) => {
@@ -226,7 +245,7 @@ async function exportToPngTiles(): Promise<void> {
 }
 
 // parse map svg to object url
-async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<string> {
+async function getMapURL(type: string, config: GetMapURLOptions = {}): Promise<string> {
   const {
     debug = false,
     noLabels = false,
@@ -235,22 +254,30 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
     noIce = false,
     noVignette = false,
     fullMap = false
-  } = options;
-
-  const cloneEl = (document.getElementById("map") as unknown as SVGSVGElement).cloneNode(true) as SVGSVGElement; // clone svg
+  } = config;
+  const cloneEl = ensureEl("map").cloneNode(true) as SVGSVGElement;
   cloneEl.id = "fantasyMap";
   document.body.appendChild(cloneEl);
   const clone: MapSelection = select(cloneEl);
   if (!debug) clone.select("#debug").remove();
 
   const cloneDefs = cloneEl.getElementsByTagName("defs")[0];
-  const svgDefs = document.getElementById("defElements") as unknown as SVGSVGElement;
+  const svgDefs = ensureEl<SVGSVGElement>("defElements");
+
+  if (fullMap) {
+    // reset transform to show the whole map
+    clone.attr("width", options.map.graph.width).attr("height", options.map.graph.height);
+    clone.select("#viewbox").attr("transform", null);
+    ViewportLayers.renderTo(cloneEl);
+
+    if (!noScaleBar) drawScaleBar(cloneEl, 1, options.map.graph.width, options.map.graph.height);
+  }
 
   const isFirefox = navigator.userAgent.toLowerCase().indexOf("firefox") > -1;
   if (isFirefox && type === "mesh") clone.select("#oceanPattern").remove();
   if (noLabels) {
-    clone.select("#labels #states").remove();
-    clone.select("#labels #burgLabels").remove();
+    clone.selectAll("#labels [data-label-type]").remove();
+    clone.selectAll("#textPaths [data-label-type]").remove();
     clone.select("#icons #burgIcons").remove();
   }
   if (noWater) {
@@ -259,19 +286,10 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
   }
   if (noIce) clone.select("#ice").remove();
   if (noVignette) clone.select("#vignette").remove();
-  if (fullMap) {
-    // reset transform to show the whole map
-    clone.attr("width", graphWidth).attr("height", graphHeight);
-    clone.select("#viewbox").attr("transform", null);
-
-    if (!noScaleBar) {
-      drawScaleBar(clone.select("#scaleBar") as unknown as Parameters<typeof drawScaleBar>[0], 1);
-      fitScaleBar(clone.select("#scaleBar") as unknown as Parameters<typeof fitScaleBar>[0], graphWidth, graphHeight);
-    }
-  }
   if (noScaleBar) clone.select("#scaleBar").remove();
 
   if (type === "svg") removeUnusedElements(clone);
+  relocateRootFilter(cloneEl); // Firefox drops a root-svg filter when the svg is rasterized via an image
   if (customization && type === "mesh") updateMeshCells(clone);
   inlineStyle(clone);
 
@@ -300,29 +318,34 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
     symbols[i].remove();
   }
 
-  // add displayed emblems
-  if (layerIsOn("toggleEmblems") && emblems.selectAll("use").size()) {
-    cloneEl
-      .getElementById("emblems")
-      ?.querySelectorAll("use")
-      .forEach(el => {
-        const href = el.getAttribute("href") || el.getAttribute("xlink:href");
-        if (!href) return;
-        const emblem = document.getElementById(href.slice(1));
-        if (emblem) cloneDefs.append(emblem.cloneNode(true));
-      });
+  // viewport layers only keep visible emblems live; full-map rendering materializes all of them into the clone
+  const cloneEmblems = cloneEl.getElementById("emblems")?.querySelectorAll("use") ?? [];
+  if (Layers.isOn("emblems") && cloneEmblems.length) {
+    const releaseDefinitions = await renderEmblemDefinitions(cloneEl);
+    cloneEmblems.forEach(el => {
+      const href = el.getAttribute("href") || el.getAttribute("xlink:href");
+      if (!href) return;
+      const id = href.slice(1);
+      const emblem = findEl(id);
+      if (!emblem) return;
+      cloneEl.getElementById(id)?.remove();
+      cloneDefs.append(emblem.cloneNode(true));
+    });
+    releaseDefinitions(); // the clone owns its copies now, so the map keeps only the emblems it shows
   } else {
     cloneDefs.querySelector("#defs-emblems")?.remove();
   }
 
   {
-    // replace ocean pattern href to base64
+    // replace ocean pattern href to base64; drop the image if it cannot be loaded,
+    // as an app-relative href is dead in an exported file
     const image = cloneEl.getElementById("oceanicPattern");
     const href = image?.getAttribute("href");
     if (image && href) {
       await new Promise<void>(resolve => {
         getBase64(href, base64 => {
           if (typeof base64 === "string") image.setAttribute("href", base64);
+          else image.remove();
           resolve();
         });
       });
@@ -330,13 +353,14 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
   }
 
   {
-    // replace texture href to base64
+    // replace texture href to base64; drop the image if it cannot be loaded
     const image = cloneEl.querySelector("#texture > image");
     const href = image?.getAttribute("href");
     if (image && href) {
       await new Promise<void>(resolve => {
         getBase64(href, base64 => {
           if (typeof base64 === "string") image.setAttribute("href", base64);
+          else image.remove();
           resolve();
         });
       });
@@ -351,6 +375,7 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
       const node = terrainNodes[i] as Element;
       const href = node.getAttribute("href") || node.getAttribute("xlink:href");
       uniqueElements.add(href);
+      node.removeAttribute("data-i"); // rendering index is not needed outside of the app
     }
 
     const defsRelief = svgDefs.getElementById("defs-relief");
@@ -371,7 +396,8 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
   if (cloneEl.getElementById("burgIcons")) {
     const groups = cloneEl.getElementById("burgIcons")!.querySelectorAll("g");
     for (const group of Array.from(groups)) {
-      const icon = group.dataset.icon && svgDefs.querySelector(group.dataset.icon);
+      if (!group.dataset.icon || cloneDefs.querySelector(group.dataset.icon)) continue;
+      const icon = svgDefs.querySelector(group.dataset.icon);
       if (icon) cloneDefs.appendChild(icon.cloneNode(true));
     }
   }
@@ -399,7 +425,7 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
 
   // add grid pattern
   if (cloneEl.getElementById("gridOverlay")?.hasChildNodes()) {
-    const type = cloneEl.getElementById("gridOverlay")!.getAttribute("type");
+    const type = styles.grid.options.type || "pointyHex";
     const pattern = svgDefs.getElementById(`pattern_${type}`);
     if (pattern) cloneDefs.appendChild(pattern.cloneNode(true));
   }
@@ -440,7 +466,8 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
     }
   }
 
-  if (!cloneEl.getElementById("fogging-cont")) cloneEl.getElementById("fog")?.remove(); // remove unused fog
+  const fogMask = cloneEl.getElementById("fog");
+  if (!fogMask?.querySelector("path")) fogMask?.remove(); // the fog mask is unused until an area is revealed
   if (!cloneEl.getElementById("regions")) cloneEl.getElementById("statePaths")?.remove(); // removed unused statePaths
   if (!cloneEl.getElementById("labels")) cloneEl.getElementById("textPaths")?.remove(); // removed unused textPaths
 
@@ -451,6 +478,8 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
       "<style>#armies text {stroke: none; fill: #fff; text-shadow: 0 0 4px #000; dominant-baseline: central; text-anchor: middle; font-family: Helvetica; fill-opacity: 1;}#armies text.regimentIcon {font-size: .8em;}</style>"
     );
   }
+
+  if (type === "svg") flattenSymbolReferences(cloneEl);
 
   // add xlink: for href to support svg 1.1
   if (type === "svg") {
@@ -497,9 +526,89 @@ async function getMapURL(type: string, options: GetMapURLOptions = {}): Promise<
   return url;
 }
 
+// resolve the font-size an em-sized symbol would inherit at this node
+function getInheritedFontSize(el: Element | null): number {
+  for (; el; el = el.parentElement) {
+    const attr = el.getAttribute("font-size");
+    if (attr && Number.isFinite(parseFloat(attr))) return parseFloat(attr);
+    const style = el.getAttribute("style");
+    const match = style?.match(/font(?:-size)?\s*:\s*([\d.]+)px/);
+    if (match) return parseFloat(match[1]);
+  }
+  return 16;
+}
+
+// Inkscape (and other non-browser renderers) don't size use->symbol references reliably,
+// especially em-sized symbols, so bake the viewBox scaling into a transform and turn symbols into groups
+export function flattenSymbolReferences(svg: SVGSVGElement): void {
+  const flattened = new Set<SVGSymbolElement>();
+
+  svg.querySelectorAll("use").forEach(use => {
+    const href = use.getAttribute("href") || use.getAttribute("xlink:href");
+    if (!href?.startsWith("#")) return;
+    const symbol = svg.querySelector<SVGSymbolElement>(`symbol[id="${href.slice(1)}"]`);
+    if (!symbol) return;
+
+    const viewBox = (symbol.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+    const [minX, minY, vw, vh] = viewBox.length === 4 && viewBox.every(Number.isFinite) ? viewBox : [0, 0, 1, 1];
+
+    const resolveLength = (value: string | null): number | null => {
+      if (!value) return null;
+      const em = value.match(/^([\d.]+)em$/);
+      if (em) return parseFloat(em[1]) * getInheritedFontSize(use);
+      const number = parseFloat(value);
+      return Number.isFinite(number) && !value.includes("%") ? number : null;
+    };
+
+    const width = resolveLength(use.getAttribute("width")) ?? resolveLength(symbol.getAttribute("width")) ?? vw;
+    const height = resolveLength(use.getAttribute("height")) ?? resolveLength(symbol.getAttribute("height")) ?? vh;
+
+    const scale = Math.min(width / vw, height / vh);
+    const x = parseFloat(use.getAttribute("x") || "0");
+    const y = parseFloat(use.getAttribute("y") || "0");
+    const tx = rn(x + (width - vw * scale) / 2 - minX * scale, 2);
+    const ty = rn(y + (height - vh * scale) / 2 - minY * scale, 2);
+
+    for (const attr of ["x", "y", "width", "height"]) use.removeAttribute(attr);
+    const transform = `translate(${tx},${ty}) scale(${rn(scale, 4)})`;
+    const existing = use.getAttribute("transform");
+    use.setAttribute("transform", existing ? `${transform} ${existing}` : transform);
+    flattened.add(symbol);
+  });
+
+  flattened.forEach(symbol => {
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    for (const attr of Array.from(symbol.attributes)) {
+      if (["viewBox", "width", "height", "overflow", "preserveAspectRatio"].includes(attr.name)) continue;
+      group.setAttribute(attr.name, attr.value);
+    }
+    while (symbol.firstChild) group.appendChild(symbol.firstChild);
+    symbol.replaceWith(group);
+  });
+}
+
+// Inkscape can't render filters on the root svg element and miscomposites default filter regions on large groups,
+// so move the global filter to the drawn groups and give all filters an explicit full-viewport region
+export function relocateRootFilter(svg: SVGSVGElement): void {
+  const filter = svg.getAttribute("filter");
+  const viewbox = svg.querySelector("#viewbox");
+  if (!filter || !viewbox) return;
+  svg.removeAttribute("filter");
+  viewbox.setAttribute("filter", filter);
+  svg.querySelector("#scaleBar")?.setAttribute("filter", filter);
+
+  svg.querySelectorAll("filter").forEach(filterEl => {
+    filterEl.setAttribute("filterUnits", "userSpaceOnUse");
+    filterEl.setAttribute("x", "0");
+    filterEl.setAttribute("y", "0");
+    filterEl.setAttribute("width", "100%");
+    filterEl.setAttribute("height", "100%");
+  });
+}
+
 // remove hidden g elements and g elements without children to make downloaded svg smaller in size
 function removeUnusedElements(clone: MapSelection): void {
-  if (!terrain.selectAll("use").size()) clone.select("#defs-relief").remove();
+  if (!select("#terrain").selectAll("use").size()) clone.select("#defs-relief").remove();
 
   for (let empty = 1; empty; ) {
     empty = 0;
@@ -516,14 +625,14 @@ function removeUnusedElements(clone: MapSelection): void {
 function updateMeshCells(clone: MapSelection): void {
   const renderOcean = ensureEl<HTMLInputElement>("renderOcean").checked;
   const data = renderOcean ? grid.cells.i : grid.cells.i.filter((i: number) => grid.cells.h[i] >= 20);
-  const scheme = getColorScheme(terrs.select("#landHeights").attr("scheme"));
+  const scheme = getColorScheme(styles.heightmap.landHeights.options.scheme);
   clone.select("#heights").attr("filter", "url(#blur1)");
   clone
     .select("#heights")
     .selectAll("polygon")
-    .data(data as number[])
+    .data(data)
     .join("polygon")
-    .attr("points", (d: number) => getGridPolygon(d, grid))
+    .attr("points", (d: number) => String(Grid.getPolygon(d)))
     .attr("id", (d: number) => `cell${d}`)
     .attr("stroke", (d: number) => getColor(grid.cells.h[d], scheme));
 }
@@ -567,11 +676,11 @@ function saveGeoJsonCells(): void {
   const json: { type: string; features: unknown[] } = { type: "FeatureCollection", features: [] };
 
   const getPopulation = (i: number) => {
-    const [r, u] = getCellPopulation(i);
+    const [r, u] = getCellPopulation(i, pack);
     return rn(r + u);
   };
 
-  const getHeight = (i: number) => parseInt(getFriendlyHeight(cells.p[i]), 10);
+  const getHeight = (i: number) => parseInt(getFriendlyHeight(cells.p[i], pack, grid), 10);
 
   function getCellCoordinates(cellVertices: number[]) {
     const coordinates = cellVertices.map(vertex => {
@@ -640,14 +749,13 @@ function saveGeoJsonRivers(): void {
 
 function saveGeoJsonMarkers(): void {
   const features = pack.markers.map(marker => {
-    const { i, type, icon, x, y, size, fill, stroke } = marker as typeof marker & {
+    const { i, type, icon, x, y, size, fill, stroke, name, note } = marker as typeof marker & {
       size?: number;
       fill?: string;
       stroke?: string;
     };
     const coordinates = toGeoCoordinates(x, y);
-    const note = notes.find(note => note.id === `marker${i}`);
-    const properties = { id: i, type, icon, x, y, ...note, size, fill, stroke };
+    const properties = { id: i, type, icon, x, y, name, note, size, fill, stroke };
     return { type: "Feature", geometry: { type: "Point", coordinates }, properties };
   });
 

@@ -1,28 +1,40 @@
-import type { Selection } from "d3";
-import { range } from "d3";
-import { rn } from "../utils";
+import { range, type Selection, select } from "d3";
+import { tip } from "@/components/tooltips";
+import { viewport } from "@/components/viewport";
+import { Controllers } from "@/controllers";
+import { ensureEl, rn } from "../utils";
 
-declare global {
-  var drawScaleBar: (scaleBar: Selection<SVGGElement, unknown, HTMLElement, unknown>, scaleLevel: number) => void;
-  var fitScaleBar: (
-    scaleBar: Selection<SVGGElement, unknown, HTMLElement, unknown>,
-    fullWidth: number,
-    fullHeight: number
-  ) => void;
+// TODO: a renderer should not own controls. Move this to a proper scale-bar component once one exists
+function addScaleBarControls(scaleBar: Selection<SVGGElement, unknown, null, undefined>): void {
+  scaleBar.on("mousemove", () => tip("Click to open Units Editor")).on("click", () => Controllers.UnitsEditor.open());
 }
 
-type ScaleBarSelection = d3.Selection<SVGGElement, unknown, HTMLElement, unknown>;
+export function drawScaleBar(
+  parent?: SVGSVGElement,
+  scaleLevel = viewport.scale,
+  width = viewport.width,
+  height = viewport.height
+): void {
+  const parentEl = parent || ensureEl<SVGSVGElement>("map");
+  const scaleBar = select(parentEl).select<SVGGElement>("#scaleBar");
 
-const scaleBarRenderer = (scaleBar: ScaleBarSelection, scaleLevel: number): void => {
-  if (!scaleBar.size() || scaleBar.style("display") === "none") return;
+  // getBBox() below throws on a subtree that is not rendered, so never draw into a hidden scale bar
+  const scaleBarEl = scaleBar.node();
+  if (!scaleBarEl || getComputedStyle(scaleBarEl).display === "none") return;
 
-  const unit = distanceUnitInput.value;
-  const size = +scaleBar.attr("data-bar-size");
+  if (!parent) addScaleBarControls(scaleBar); // the on-map bar is clickable, an exported copy is not
 
-  const length = getLength(scaleBar, scaleLevel);
-  scaleBar.select("#scaleBarContent").remove(); // redraw content every time
+  const renderedContent = scaleBar.select("#scaleBarContent");
+  const isRendered = Boolean(renderedContent.size());
+  TIME && !isRendered && console.time("drawScaleBar");
+
+  const unit = options.map.units.distance.unit;
+  const { barSize: size, label, x: posX, y: posY } = styles.scaleBar.options;
+
+  renderedContent?.remove(); // redraw content every time, but not scaleBarBack
   const content = scaleBar.append("g").attr("id", "scaleBarContent");
 
+  const length = getLength();
   const lines = content.append("g");
   lines
     .append("line")
@@ -60,9 +72,11 @@ const scaleBarRenderer = (scaleBar: ScaleBarSelection, scaleLevel: number): void
     .attr("x", (d: number) => rn((d * length) / 5, 2))
     .attr("y", 0)
     .attr("dy", "-.6em")
-    .text((d: number) => rn((((d * length) / 5) * distanceScale) / scaleLevel) + (d < 5 ? "" : ` ${unit}`));
+    .text(
+      (d: number) =>
+        rn((((d * length) / 5) * options.map.units.distance.scale) / scaleLevel) + (d < 5 ? "" : ` ${unit}`)
+    );
 
-  const label = scaleBar.attr("data-label");
   if (label) {
     texts
       .append("text")
@@ -76,10 +90,12 @@ const scaleBarRenderer = (scaleBar: ScaleBarSelection, scaleLevel: number): void
   const scaleBarBack = scaleBar.select<SVGRectElement>("#scaleBarBack");
   if (scaleBarBack.size()) {
     const bbox = (content.node() as SVGGElement).getBBox();
-    const paddingTop = +scaleBarBack.attr("data-top") || 0;
-    const paddingLeft = +scaleBarBack.attr("data-left") || 0;
-    const paddingRight = +scaleBarBack.attr("data-right") || 0;
-    const paddingBottom = +scaleBarBack.attr("data-bottom") || 0;
+    const {
+      top: paddingTop,
+      left: paddingLeft,
+      right: paddingRight,
+      bottom: paddingBottom
+    } = styles.scaleBar.back.options;
 
     scaleBar
       .select("#scaleBarBack")
@@ -87,36 +103,31 @@ const scaleBarRenderer = (scaleBar: ScaleBarSelection, scaleLevel: number): void
       .attr("y", -paddingTop)
       .attr("width", bbox.width + paddingRight)
       .attr("height", bbox.height + paddingBottom);
+
+    const backBbox = (scaleBarBack.node() as SVGGElement).getBBox();
+    const x = rn((width * posX) / 100 - backBbox.width + 10);
+    const y = rn((height * posY) / 100 - backBbox.height + 20);
+    scaleBar.attr("transform", `translate(${x},${y})`);
   }
-};
 
-function getLength(scaleBar: ScaleBarSelection, scaleLevel: number): number {
-  const init = 100;
+  TIME && !isRendered && console.timeEnd("drawScaleBar");
 
-  const size = +scaleBar.attr("data-bar-size");
-  let val = (init * size * distanceScale) / scaleLevel; // bar length in distance unit
-  if (val > 900)
-    val = rn(val, -3); // round to 1000
-  else if (val > 90)
-    val = rn(val, -2); // round to 100
-  else if (val > 9)
-    val = rn(val, -1); // round to 10
-  else val = rn(val); // round to 1
-  const length = (val * scaleLevel) / distanceScale; // actual length in pixels on this scale
-  return length;
+  function getLength(): number {
+    const init = 100;
+
+    let val = (init * size * options.map.units.distance.scale) / scaleLevel; // bar length in distance unit
+    if (val > 900)
+      val = rn(val, -3); // round to 1000
+    else if (val > 90)
+      val = rn(val, -2); // round to 100
+    else if (val > 9)
+      val = rn(val, -1); // round to 10
+    else val = rn(val); // round to 1
+    const length = (val * scaleLevel) / options.map.units.distance.scale; // actual length in pixels on this scale
+    return length;
+  }
 }
 
-const scaleBarResize = (scaleBar: ScaleBarSelection, fullWidth: number, fullHeight: number): void => {
-  if (!scaleBar.select("rect").size() || scaleBar.style("display") === "none") return;
-
-  const posX = +scaleBar.attr("data-x") || 99;
-  const posY = +scaleBar.attr("data-y") || 99;
-  const bbox = (scaleBar.select("rect").node() as SVGRectElement).getBBox();
-
-  const x = rn((fullWidth * posX) / 100 - bbox.width + 10);
-  const y = rn((fullHeight * posY) / 100 - bbox.height + 20);
-  scaleBar.attr("transform", `translate(${x},${y})`);
-};
-
-window.drawScaleBar = scaleBarRenderer;
-window.fitScaleBar = scaleBarResize;
+export function removeScaleBar() {
+  select("#scaleBarContent").remove();
+}

@@ -1,27 +1,21 @@
+import { select } from "d3";
+import { confirmationDialog, destroyDialog } from "@/components/dialog/dialog-helpers";
+import { Layers } from "@/components/layers";
+import { tip } from "@/components/tooltips";
 import type { Route } from "@/generators/routes-generator";
 import { ensureEl } from "../utils";
 
 // custom legacy 3-arg prompt from commonUtils.initializePrompt (collides with lib.dom's var prompt)
 declare const prompt: (text: string, options: { default: string }, callback: (value: string) => void) => void;
 
-const DEFAULT_GROUPS = ["roads", "trails", "searoutes", "railways", "airways"];
-
-const DIALOG_HTML = /* html */ `
-  <div id="routeGroupsEditorBody" class="table" style="padding: 0.3em 0; width: 100%"></div>
-  <div id="routeGroupsEditorBottom">
-    <button id="routeGroupsEditorAdd" data-tip="Add route group" class="icon-plus"></button>
-  </div>`;
+const DEFAULT_GROUPS = ["roads", "trails", "searoutes"];
 
 function open(): void {
   if (customization) return;
-  if (!layerIsOn("toggleRoutes")) toggleRoutes();
+  Layers.show("routes");
 
-  ensureEl("routeGroupsEditor").innerHTML = DIALOG_HTML;
+  renderDialog();
   addLines();
-
-  // add listeners — dropped together with the dialog HTML on close
-  ensureEl("routeGroupsEditorAdd").on("click", addGroup);
-  ensureEl("routeGroupsEditorBody").on("click", onBodyClick);
 
   $("#routeGroupsEditor").dialog({
     title: "Edit Route groups",
@@ -31,32 +25,44 @@ function open(): void {
   });
 }
 
+function renderDialog(): void {
+  destroyDialog("routeGroupsEditor");
+
+  const html = /* html */ `<div id="routeGroupsEditor" class="dialog">
+    <div id="routeGroupsEditorBody" class="table" style="padding: 0.3em 0; width: 100%"></div>
+    <div id="routeGroupsEditorBottom">
+      <button id="routeGroupsEditorAdd" data-tip="Add route group" class="icon-plus"></button>
+    </div>
+  </div>`;
+  ensureEl("dialogs").insertAdjacentHTML("beforeend", html);
+
+  // add listeners — dropped together with the dialog HTML on close
+  ensureEl("routeGroupsEditorAdd").addEventListener("click", addGroup);
+  ensureEl("routeGroupsEditorBody").addEventListener("click", onBodyClick);
+}
+
 function closeRouteGroupsEditor(): void {
-  ensureEl("routeGroupsEditor").innerHTML = "";
+  destroyDialog("routeGroupsEditor");
 }
 
 function onBodyClick(ev: Event): void {
   const target = ev.target as HTMLElement;
   const group = target.closest<HTMLElement>(".states")?.dataset.id;
-  if (!group) return;
-  if (target.classList.contains("editStyle")) editStyle("routes", group);
-  else if (target.classList.contains("toggleGroupVisibility")) toggleGroupVisibility(group);
-  else if (target.classList.contains("removeGroup")) removeGroup(group);
+  if (target.classList.contains("editStyle") && group) editStyle("routes", group);
+  else if (target.classList.contains("removeGroup") && group) removeGroup(group);
 }
 
 function addLines(): void {
   ensureEl("routeGroupsEditorBody").innerHTML = "";
 
-  const lines = routes
+  const lines = select("#routes")
     .selectAll<SVGGElement, unknown>("g")
     .nodes()
     .map(el => {
-      const count = el.children.length;
-      const hidden = el.style.display === "none";
-      return /* html */ `<div data-id="${el.id}" class="states" style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="opacity: ${hidden ? 0.4 : 1}">${el.id} (${count})</span>
+      const count = pack.routes.filter((route: Route) => route.group === el.id).length;
+      return /* html */ `<div data-id="${el.id}" class="states" style="display: flex; justify-content: space-between;">
+          <span>${el.id} (${count})</span>
           <div style="width: auto; display: flex; gap: 0.4em;">
-            <span data-tip="Toggle visibility" class="toggleGroupVisibility ${hidden ? "icon-eye-off" : "icon-eye"} pointer" style="font-size: smaller;"></span>
             <span data-tip="Edit style" class="editStyle icon-brush pointer" style="font-size: smaller;"></span>
             <span data-tip="Remove group" class="removeGroup icon-trash pointer"></span>
           </div>
@@ -64,14 +70,6 @@ function addLines(): void {
     });
 
   ensureEl("routeGroupsEditorBody").innerHTML = lines.join("");
-}
-
-function toggleGroupVisibility(group: string): void {
-  const el = document.getElementById(group);
-  if (!el) return;
-  const isHidden = el.style.display === "none";
-  el.style.display = isHidden ? "" : "none";
-  addLines();
 }
 
 function addGroup(): void {
@@ -87,13 +85,21 @@ function addGroup(): void {
       return tip("Element with this name already exists. Provide a unique name", false, "error");
     if (Number.isFinite(+group.charAt(0))) return tip("Group name should start with a letter", false, "error");
 
-    routes
-      .append("g")
-      .attr("id", group)
-      .attr("stroke", "#000000")
-      .attr("stroke-width", 0.5)
-      .attr("stroke-dasharray", "1 0.5")
-      .attr("stroke-linecap", "butt");
+    // the store is authoritative: seed an entry so style edits and presets can address the group
+    const template = styles.routes.groups.roads || Object.values(styles.routes.groups)[0];
+    const groupStyle = structuredClone(template);
+    Object.assign(groupStyle.attrs, {
+      stroke: "#000000",
+      "stroke-width": 0.5,
+      "stroke-dasharray": "1 0.5",
+      "stroke-linecap": "butt"
+    });
+    styles.routes.groups[group] = groupStyle;
+
+    const groupEl = select("#routes").append("g").attr("id", group).attr("data-group", group);
+    for (const [attr, value] of Object.entries(groupStyle.attrs)) {
+      if (value !== null && value !== undefined) groupEl.attr(attr, value);
+    }
     ensureEl<HTMLSelectElement>("routeGroup").options.add(new Option(group, group));
     addLines();
 
@@ -109,7 +115,8 @@ function removeGroup(group: string): void {
     confirm: "Remove",
     onConfirm: () => {
       pack.routes.filter((r: Route) => r.group === group).forEach(Routes.remove);
-      if (!DEFAULT_GROUPS.includes(group)) routes.select(`#${group}`).remove();
+      if (!DEFAULT_GROUPS.includes(group)) select("#routes").select(`#${group}`).remove();
+      Layers.draw("routes", "labels");
       addLines();
     }
   });

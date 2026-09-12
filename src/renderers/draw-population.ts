@@ -1,9 +1,5 @@
-import { color, curveBasisClosed, interpolateYlOrRd, line } from "d3";
+import { color, curveBasisClosed, interpolateYlOrRd, line, select } from "d3";
 import { connectVertices, ensureEl, getIsolines, round, si } from "../utils";
-
-declare global {
-  var drawPopulation: () => void;
-}
 
 const LEVELS = 12;
 const SWATCH_SIZE = 10;
@@ -17,17 +13,21 @@ type PopulationMode = "isoline" | "province" | "cell";
 // Persisted across redraws so toggling doesn't reset the mode
 let populationMode: PopulationMode = "province";
 
-const populationRenderer = (): void => {
+const population = () => select(ensureEl<SVGGElement>("population"));
+
+export function drawPopulation(): void {
   TIME && console.time("drawPopulation");
 
-  population.selectAll("*").remove();
+  population().selectAll("*").remove();
 
   const { cells, vertices, burgs } = pack;
   const n = cells.i.length;
 
-  const urbanizationRate = +(ensureEl("urbanizationInput") as HTMLInputElement).value;
-  const popRate = +(ensureEl("populationRateInput") as HTMLInputElement).value;
-  const distUnit = (ensureEl("distanceUnitInput") as HTMLInputElement).value;
+  const { distance, population: populationUnits } = options.map.units;
+  const urbanizationRate = populationUnits.urbanization.rate;
+  const popRate = populationUnits.scale;
+  const distUnit = distance.unit;
+  const distanceScale = distance.scale;
 
   // Mean land-cell area in real-world units
   const landCellIds = cells.i.filter((i: number) => cells.h[i] >= 20);
@@ -64,7 +64,7 @@ const populationRenderer = (): void => {
   }
 
   TIME && console.timeEnd("drawPopulation");
-};
+}
 
 // ─── Cell mode ───────────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ function buildCellDensity(
 
   for (const i of cells.i) {
     if (cells.h[i] < 20) continue;
-    if (!biomesData.habitability[cells.biome[i]]) continue;
+    if (!pack.biomes[cells.biome[i]]?.habitability) continue;
     density[i] = cells.pop[i];
   }
 
@@ -187,7 +187,7 @@ function drawProvinceLayers(provDensity: Float64Array, thresholds: number[]): vo
     const tFraction = ti / (levels - 1);
     const fillColor = interpolateYlOrRd(0.08 + tFraction * 0.92);
 
-    population
+    population()
       .append("path")
       .attr("d", isoline.fill)
       .attr("fill", fillColor)
@@ -235,7 +235,7 @@ function drawCellLayer(density: Float32Array, thresholds: number[]): void {
     if (!bucketPaths[bucket]) continue;
     const tFraction = (bucket - 1) / (levels - 1);
     const fillColor = interpolateYlOrRd(0.08 + tFraction * 0.92);
-    population
+    population()
       .append("path")
       .attr("d", bucketPaths[bucket])
       .attr("fill", fillColor)
@@ -272,7 +272,7 @@ function drawDensityLayers(density: Float32Array, thresholds: number[], cells: a
   // All paths drawn opaque inside a single semi-transparent group.
   // Drawing lowest → highest means each band naturally covers the one below —
   // no evenodd subtraction, no stacking artifacts.
-  const g = population.append("g").attr("opacity", 0.72);
+  const g = population().append("g").attr("opacity", 0.72);
 
   for (let ti = 0; ti < levels; ti++) {
     const t = thresholds[ti];
@@ -329,12 +329,12 @@ function drawLegend(thresholds: number[], distUnit: string): void {
   const legendH = levels * rowH + LEGEND_PADDING * 2 + 14 + 18;
   const legendW = LEGEND_W;
   const x0 = 16;
-  const y0 = graphHeight - legendH - 16;
+  const y0 = options.map.graph.height - legendH - 16;
   const areaUnit = `${distUnit}²`;
   // All modes store people/unit² directly — no conversion needed
   const toRealDensity = (t: number) => t;
 
-  const g = population.append("g").attr("id", "populationLegend");
+  const g = population().append("g").attr("id", "populationLegend");
 
   // Background
   g.append("rect")
@@ -428,5 +428,3 @@ function drawToggleButton(
     .on("click", onClick)
     .text(label);
 }
-
-window.drawPopulation = populationRenderer;

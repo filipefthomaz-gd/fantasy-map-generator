@@ -1,9 +1,5 @@
-import { color, interpolateBlues } from "d3";
-import { si } from "../utils";
-
-declare global {
-  var drawPrecipitation: () => void;
-}
+import { color, easeSinIn, interpolateBlues, select, transition } from "d3";
+import { ensureEl, si } from "../utils";
 
 const LEVELS = 8;
 const SWATCH_SIZE = 10;
@@ -16,15 +12,16 @@ type PrecipitationMode = "cells" | "symbols" | "province";
 
 let precipitationMode: PrecipitationMode = "cells";
 
-const precipitationRenderer = (): void => {
+const prec = () => select(ensureEl<SVGGElement>("prec"));
+
+export function drawPrecipitation(): void {
   TIME && console.time("drawPrecipitation");
 
-  // Remove data elements but keep wind direction arrows (#wind group)
-  prec.selectAll("circle, path").remove();
-  prec.selectAll("#precipLegend").remove();
+  prec().selectAll("*").remove();
 
-  // Fade in wind text elements
-  prec.selectAll("text").attr("opacity", 0).transition().duration(600).attr("opacity", 1);
+  const show = transition().duration(800).ease(easeSinIn);
+  drawWindDirections();
+  prec().selectAll("text").attr("opacity", 0).transition(show).attr("opacity", 1);
 
   if (precipitationMode === "cells") {
     drawCellsChoropleth();
@@ -35,10 +32,41 @@ const precipitationRenderer = (): void => {
   }
 
   drawLegend();
-  prec.style("display", "block");
 
   TIME && console.timeEnd("drawPrecipitation");
-};
+}
+
+export function removePrecipitation(): void {
+  prec().selectAll("*").remove();
+}
+
+/** arrows showing where the prevailing winds enter the map */
+function drawWindDirections(): void {
+  const { westerly, easterly, northerly, southerly } = Precipitation.getWinds();
+  const wind = prec().append("g").attr("id", "wind");
+
+  const addArrow = (x: number, y: number, symbol: string) =>
+    wind.append("text").attr("text-rendering", "optimizeSpeed").attr("x", x).attr("y", y).text(symbol);
+
+  const getMeanY = (fromCellId: number, toCellId: number) =>
+    (grid.points[fromCellId][1] + grid.points[toCellId][1]) / 2;
+
+  for (let tier = 0; tier < 6; tier++) {
+    if (westerly.length > 1) {
+      const west = westerly.filter(band => band[2] === tier);
+      if (west.length > 3) addArrow(20, getMeanY(west[0][0], west[west.length - 1][0]), "\u21C9");
+    }
+
+    if (easterly.length > 1) {
+      const east = easterly.filter(band => band[2] === tier);
+      if (east.length > 3)
+        addArrow(options.map.graph.width - 52, getMeanY(east[0][0], east[east.length - 1][0]), "\u21C7");
+    }
+  }
+
+  if (northerly) addArrow(options.map.graph.width / 2, 42, "\u21CA");
+  if (southerly) addArrow(options.map.graph.width / 2, options.map.graph.height - 20, "\u21C8");
+}
 
 function getPrecValues(): Float32Array {
   const { cells: packCells } = pack;
@@ -93,7 +121,7 @@ function drawCellsChoropleth(): void {
     if (!bucketPaths[bucket]) continue;
     const tFraction = (bucket - 1) / (levels - 1);
     const fillColor = interpolateBlues(0.15 + tFraction * 0.85);
-    prec
+    prec()
       .append("path")
       .attr("d", bucketPaths[bucket])
       .attr("fill", fillColor)
@@ -157,7 +185,7 @@ function drawProvinceChoropleth(): void {
     if (!bucketPaths[bucket]) continue;
     const tFraction = (bucket - 1) / (levels - 1);
     const fillColor = interpolateBlues(0.15 + tFraction * 0.85);
-    prec
+    prec()
       .append("path")
       .attr("d", bucketPaths[bucket])
       .attr("fill", fillColor)
@@ -170,13 +198,13 @@ function drawProvinceChoropleth(): void {
 
 function drawSymbols(): void {
   const { cells, points } = grid;
-  const cellsNumberModifier = ((window as any).pointsInput.dataset.cells / 10000) ** 0.25;
-  const data = cells.i.filter((i: number) => cells.h[i] >= 20 && cells.prec[i]);
+  const cellsNumberModifier = (options.map.graph.points / 10000) ** 0.25;
+  const data = Array.from(cells.i as ArrayLike<number>).filter(i => cells.h[i] >= 20 && cells.prec[i]);
   const getRadius = (p: number) => Math.round((Math.sqrt(p / 4) / cellsNumberModifier) * 100) / 100;
 
-  prec
+  prec()
     .selectAll("circle")
-    .data(data as number[])
+    .data(data)
     .enter()
     .append("circle")
     .attr("cx", (d: number) => points[d][0])
@@ -193,9 +221,9 @@ function drawLegend(): void {
   const rowH = SWATCH_SIZE + SWATCH_GAP;
   const legendH = levels * rowH + LEGEND_PADDING * 2 + 14 + 18;
   const x0 = 16;
-  const y0 = graphHeight - legendH - 16;
+  const y0 = options.map.graph.height - legendH - 16;
 
-  const g = prec.append("g").attr("id", "precipLegend").attr("stroke", "none").style("text-shadow", "none");
+  const g = prec().append("g").attr("id", "precipLegend").attr("stroke", "none").style("text-shadow", "none");
 
   g.append("rect")
     .attr("x", x0)
@@ -290,5 +318,3 @@ function drawToggleButton(
     .on("click", onClick)
     .text(label);
 }
-
-window.drawPrecipitation = precipitationRenderer;

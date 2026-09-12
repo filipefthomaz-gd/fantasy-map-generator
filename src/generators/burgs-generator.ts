@@ -1,10 +1,19 @@
 import { quadtree } from "d3-quadtree";
-import { each, ensureEl, gauss, minmax, normalize, P, rn } from "../utils";
+import { AUTO_BURG_LIMIT } from "@/components/options-schema";
+import { Emblems } from "@/generators/emblems-generator";
+import type { BurgGroup } from "@/types/burg-groups";
+import type { Emblem } from "@/types/emblems";
+import { safeParseJSON } from "@/utils/stringUtils";
+import { each, gauss, minmax, normalize, P, rn } from "../utils";
 import { type CultureType, DEFAULT_CULTURE_TYPE } from "./cultures-generator";
 import { NON_NAVIGABLE_LAKE_GROUPS } from "./features";
+import type { Label } from "./labels-generator";
+import { Population } from "./population-generator";
 import type { ProductionRecord } from "./production-generator";
 import type { River } from "./river-generator";
 import type { Point } from "./voronoi";
+
+export const isAutoBurgLimit = (): boolean => options.generation.burgs.limit === AUTO_BURG_LIMIT;
 
 export interface Burg {
   cell: number;
@@ -21,7 +30,7 @@ export interface Burg {
   removed?: boolean;
   population?: number;
   type?: CultureType;
-  coa?: any;
+  coa?: Emblem;
   citadel?: number;
   plaza?: number;
   walls?: number;
@@ -37,6 +46,8 @@ export interface Burg {
   product?: number; // gross product from the last production run
   treasury?: number; // accumulated cash balance
   market?: number;
+  label?: Label;
+  note?: string;
 }
 
 // A burg that could become a port on a given water body.
@@ -50,7 +61,6 @@ type PortCandidate = {
 
 class BurgModule {
   generate() {
-    TIME && console.time("generateBurgs");
     const { cells } = pack;
 
     let burgs: Burg[] = [0 as any]; // burgs array
@@ -70,7 +80,7 @@ class BurgModule {
       const sorted = populatedCells.sort((a, b) => score[b] - score[a]);
 
       const capitalsNumber = getCapitalsNumber();
-      let spacing = (graphWidth + graphHeight) / 2 / capitalsNumber; // min distance between capitals
+      let spacing = (options.map.graph.width + options.map.graph.height) / 2 / capitalsNumber; // min distance between capitals
 
       for (let i = 0; burgs.length <= capitalsNumber; i++) {
         const cell = sorted[i];
@@ -109,7 +119,7 @@ class BurgModule {
       const sorted = populatedCells.sort((a, b) => score[b] - score[a]);
 
       const burgsNumber = getTownsNumber();
-      let spacing = (graphWidth + graphHeight) / 150 / (burgsNumber ** 0.7 / 66); // min distance between town
+      let spacing = (options.map.graph.width + options.map.graph.height) / 150 / (burgsNumber ** 0.7 / 66); // min distance between town
 
       for (let added = 0; added < burgsNumber && spacing > 1; ) {
         for (let i = 0; added < burgsNumber && i < sorted.length; i++) {
@@ -149,10 +159,8 @@ class BurgModule {
     pack.burgs = burgs;
     this.assignPorts();
 
-    TIME && console.timeEnd("generateBurgs");
-
     function getCapitalsNumber() {
-      let number = (ensureEl("statesNumber") as HTMLInputElement).valueAsNumber;
+      let number = options.generation.states.limit;
 
       if (populatedCells.length < number * 10) {
         number = Math.floor(populatedCells.length / 10);
@@ -163,11 +171,8 @@ class BurgModule {
     }
 
     function getTownsNumber() {
-      const manorsInput = ensureEl("manorsInput") as HTMLInputElement;
-      const isAuto = manorsInput.value === "1000"; // '1000' is considered as auto
-      if (isAuto) return rn(populatedCells.length / 5 / (grid.points.length / 10000) ** 0.8);
-
-      return Math.min(manorsInput.valueAsNumber, populatedCells.length);
+      if (isAutoBurgLimit()) return rn(populatedCells.length / 5 / (grid.points.length / 10000) ** 0.8);
+      return Math.min(options.generation.burgs.limit, populatedCells.length);
     }
   }
 
@@ -381,8 +386,8 @@ class BurgModule {
     if (burg.culture !== state.culture) kinship -= 0.25;
 
     const type = burg.capital && P(0.2) ? "Capital" : burg.type === "Generic" ? "City" : burg.type;
-    burg.coa = COA.generate(stateCOA, kinship, null, type);
-    burg.coa.shield = COA.getShield(burg.culture!, burg.state!);
+    burg.coa = Emblems.generate(stateCOA, kinship, null, type);
+    burg.coa.shield = Emblems.getShield(burg.culture!, burg.state!);
   }
 
   private defineFeatures(burg: Burg) {
@@ -397,7 +402,25 @@ class BurgModule {
     );
   }
 
-  getDefaultGroups() {
+  /** burg assignment needs a named, ordered group and a default to fall back on: a value persisted
+   * by an older build can satisfy neither and still parse */
+  parseStoredGroups(stored: string | null): BurgGroup[] {
+    const parsed = stored ? safeParseJSON(stored) : null;
+    const groups: BurgGroup[] = Array.isArray(parsed)
+      ? parsed.filter(group => typeof group?.name === "string" && typeof group?.order === "number")
+      : [];
+    if (!groups.length) return this.getDefaultGroups();
+
+    this.ensureDefaultGroup(groups);
+    return groups;
+  }
+
+  /** `defineGroup` assigns every burg to the default group first: without one it assigns none */
+  ensureDefaultGroup(groups: BurgGroup[]): void {
+    if (groups.length && !groups.some(group => group.isDefault)) groups[0].isDefault = true;
+  }
+
+  getDefaultGroups(): BurgGroup[] {
     return [
       {
         name: "capital",
@@ -470,21 +493,34 @@ class BurgModule {
     ];
   }
 
+  /** burg groups can exist without a style entry (the Burg Groups editor, presets that don't
+   * list them) - without one the renderer falls back to the default group and edits never persist */
+  ensureBurgGroupStyles(): void {
+    const { burgIcons, anchors } = styles.burgIcons;
+    const iconTemplate = burgIcons.groups.town || Object.values(burgIcons.groups)[0];
+    const anchorTemplate = anchors.groups.town || Object.values(anchors.groups)[0];
+    for (const { name } of options.map.burgs.groups) {
+      if (!burgIcons.groups[name] && iconTemplate) burgIcons.groups[name] = structuredClone(iconTemplate);
+      if (!anchors.groups[name] && anchorTemplate) anchors.groups[name] = structuredClone(anchorTemplate);
+    }
+  }
+
   defineGroup(burg: Burg, populations: number[]) {
     if (burg.lock && burg.group) {
       // locked burgs: don't change group if it still exists
-      const group = options.burgs.groups.find((g: any) => g.name === burg.group);
+      const group = options.map.burgs.groups.find(group => group.name === burg.group);
       if (group) return;
     }
 
-    const defaultGroup = options.burgs.groups.find((g: any) => g.isDefault);
+    const defaultGroup = options.map.burgs.groups.find(g => g.isDefault);
     if (!defaultGroup) {
       ERROR && console.error("No default group defined");
       return;
     }
     burg.group = defaultGroup.name;
+    if (burg.label?.group) delete burg.label.group;
 
-    for (const group of options.burgs.groups) {
+    for (const group of options.map.burgs.groups) {
       if (!group.active) continue;
 
       if (group.min) {
@@ -521,8 +557,6 @@ class BurgModule {
   }
 
   specify() {
-    TIME && console.time("specifyBurgs");
-
     pack.burgs.forEach(burg => {
       if (!burg.i || burg.removed || burg.lock) return;
       this.definePopulation(burg);
@@ -539,18 +573,21 @@ class BurgModule {
       if (!burg.i || burg.removed) return;
       this.defineGroup(burg, populations);
     });
-
-    TIME && console.timeEnd("specifyBurgs");
   }
 
   private createWatabouCityLinks(burg: Burg) {
     const cells = pack.cells;
     const { i, name, population: burgPopulation, cell } = burg;
-    const burgSeed = burg.MFCG || seed + String(burg.i).padStart(4, "0");
+    const burgSeed = burg.MFCG || options.map.seed + String(burg.i).padStart(4, "0");
 
-    const sizeRaw = 2.13 * ((burgPopulation! * populationRate) / urbanDensity) ** 0.385;
+    const sizeRaw =
+      2.13 *
+      ((burgPopulation! * options.map.units.population.scale) / options.map.units.population.urbanization.density) **
+        0.385;
     const size = minmax(Math.ceil(sizeRaw), 6, 100);
-    const population = rn(burgPopulation! * populationRate * urbanization);
+    const population = rn(
+      burgPopulation! * options.map.units.population.scale * options.map.units.population.urbanization.rate
+    );
 
     const river = cells.r[cell] ? 1 : 0;
     const coast = Number((burg.port || 0) > 0);
@@ -609,8 +646,8 @@ class BurgModule {
     const { cells, features } = pack;
     const { i, population, cell } = burg;
 
-    const burgSeed = seed + String(i).padStart(4, "0");
-    const pop = rn(population! * populationRate * urbanization);
+    const burgSeed = options.map.seed + String(i).padStart(4, "0");
+    const pop = rn(population! * options.map.units.population.scale * options.map.units.population.urbanization.rate);
     const tags = [];
 
     if (cells.r[cell] && cells.haven[cell]) tags.push("estuary");
@@ -669,8 +706,10 @@ class BurgModule {
   }
 
   private createWatabouDwellingLinks(burg: Burg) {
-    const burgSeed = seed + String(burg.i).padStart(4, "0");
-    const pop = rn(burg.population! * populationRate * urbanization);
+    const burgSeed = options.map.seed + String(burg.i).padStart(4, "0");
+    const pop = rn(
+      burg.population! * options.map.units.population.scale * options.map.units.population.urbanization.rate
+    );
 
     const tags = (() => {
       if (pop > 200) return ["large", "tall"];
@@ -700,7 +739,7 @@ class BurgModule {
     };
     if (burg.link) return { link: burg.link, preview: burg.link };
 
-    const group = options.burgs.groups.find((g: any) => g.name === burg.group);
+    const group = options.map.burgs.groups.find(group => group.name === burg.group);
     if (!group?.preview || !previewGeneratorsMap[group.preview]) return { link: null, preview: null };
 
     return previewGeneratorsMap[group.preview](burg);
@@ -710,7 +749,7 @@ class BurgModule {
     const { cells } = pack;
 
     const burgId = pack.burgs.length;
-    const cellId = window.findCell(x, y, undefined, pack);
+    const cellId = Pack.findCell(x, y);
     const culture = cells.culture[cellId as number];
     const name = Names.getCulture(culture);
     const state = cells.state[cellId as number];
@@ -730,7 +769,6 @@ class BurgModule {
     };
     this.definePopulation(burg);
     this.defineEmblem(burg);
-    COArenderer.add("burg", burgId, burg.coa, x, y);
     this.defineFeatures(burg);
 
     const populations = pack.burgs
@@ -742,13 +780,106 @@ class BurgModule {
     pack.burgs.push(burg);
     cells.burg[cellId as number] = burgId;
 
-    const newRoute = Routes.connect(cellId as number);
-    if (newRoute && layerIsOn("toggleRoutes")) drawRoute(newRoute);
-
-    drawBurgIcon(burg);
-    drawBurgLabel(burg);
-
+    Routes.connect(cellId as number);
     return burgId;
+  }
+
+  regenerate(): void {
+    const { cells, burgs, states, provinces } = pack;
+    Population.rankCells();
+
+    const newBurgs: Burg[] = [0 as unknown as Burg];
+    const burgsTree = quadtree<[number, number]>();
+    cells.burg = new Uint16Array(cells.i.length);
+    states
+      .filter(state => state.i)
+      .forEach(state => {
+        state.capital = 0;
+      });
+    provinces
+      .filter(province => province.i)
+      .forEach(province => {
+        province.burg = 0;
+      });
+
+    const lockedBurgs = burgs.filter(burg => burg.i && !burg.removed && burg.lock);
+    for (const lockedBurg of lockedBurgs) {
+      const newId = newBurgs.length;
+      lockedBurg.i = newId;
+      newBurgs.push(lockedBurg);
+      burgsTree.add([lockedBurg.x, lockedBurg.y]);
+      cells.burg[lockedBurg.cell] = newId;
+
+      if (lockedBurg.capital && lockedBurg.state !== undefined) {
+        states[lockedBurg.state].capital = newId;
+        states[lockedBurg.state].center = lockedBurg.cell;
+      }
+    }
+
+    const marketCenterIds = new Set(pack.markets.map(market => market.centerBurgId));
+    const unlockedMarketCenters = burgs.filter(
+      burg => burg.i && !burg.removed && !burg.lock && marketCenterIds.has(burg.i)
+    );
+    for (const centerBurg of unlockedMarketCenters) {
+      const oldId = centerBurg.i;
+      const newId = newBurgs.length;
+      const market = pack.markets.find(market => market.centerBurgId === oldId);
+      if (market) market.centerBurgId = newId;
+
+      centerBurg.i = newId;
+      newBurgs.push(centerBurg);
+      burgsTree.add([centerBurg.x, centerBurg.y]);
+      cells.burg[centerBurg.cell] = newId;
+    }
+
+    const score = new Int16Array(cells.s.map(value => value * Math.random()));
+    const sorted = cells.i.filter(i => score[i] > 0 && cells.culture[i]).sort((a, b) => score[b] - score[a]);
+    const statesCount = states.filter(state => state.i && !state.removed).length;
+    const burgsCount =
+      (isAutoBurgLimit()
+        ? rn(sorted.length / 5 / (grid.points.length / 10000) ** 0.8)
+        : options.generation.burgs.limit) + statesCount;
+    const spacing = (options.map.graph.width + options.map.graph.height) / 150 / (burgsCount ** 0.7 / 66);
+
+    for (let index = 0; index < sorted.length && newBurgs.length < burgsCount; index++) {
+      const id = newBurgs.length;
+      const cell = sorted[index];
+      const [x, y] = cells.p[cell];
+      const minDistance = spacing * gauss(1, 0.3, 0.2, 2, 2);
+      if (burgsTree.find(x, y, minDistance) !== undefined) continue;
+
+      const stateId = cells.state[cell];
+      const capital = Number(Boolean(stateId && !states[stateId].capital));
+      if (capital) {
+        states[stateId].capital = id;
+        states[stateId].center = cell;
+      }
+
+      const culture = cells.culture[cell];
+      const name = Names.getCulture(culture);
+      newBurgs.push({ cell, x, y, state: stateId, i: id, culture, name, capital, feature: cells.f[cell] });
+      burgsTree.add([x, y]);
+      cells.burg[cell] = id;
+    }
+
+    pack.burgs = newBurgs;
+    this.assignPorts();
+
+    states
+      .filter(state => state.i && !state.removed && !state.capital)
+      .forEach(state => {
+        const [x, y] = cells.p[state.center];
+        const burgId = this.add([x, y]);
+        state.capital = burgId;
+        state.center = pack.burgs[burgId].cell;
+        const burg = pack.burgs[burgId];
+        burg.state = state.i;
+        burg.capital = 1;
+        this.changeGroup(burg, null);
+      });
+
+    this.specify();
+    Routes.regenerate();
   }
 
   changeGroup(burg: Burg, group: string | null = null) {
@@ -759,29 +890,19 @@ class BurgModule {
       const populations = validBurgs.map(b => b.population as number).sort((a, b) => a - b);
       this.defineGroup(burg, populations);
     }
-
-    drawBurgIcon(burg);
-    drawBurgLabel(burg);
   }
 
   remove(burgId: number) {
     const burg = pack.burgs[burgId];
-    if (!burg) return tip(`Burg ${burgId} not found`, false, "error");
+    if (!burg) return window.tip(`Burg ${burgId} not found`, false, "error");
 
     pack.cells.burg[burg.cell] = 0;
     burg.removed = true;
-
-    const noteId = notes.findIndex(note => note.id === `burg${burgId}`);
-    if (noteId !== -1) notes.splice(noteId, 1);
+    delete burg.note;
 
     if (burg.coa) {
-      document.getElementById(`burgCOA${burgId}`)?.remove();
-      emblems.select(`#burgEmblems > use[data-i='${burgId}']`).remove();
       delete burg.coa;
     }
-
-    removeBurgIcon(burg.i!);
-    removeBurgLabel(burg.i!);
   }
 }
 
@@ -789,4 +910,7 @@ declare global {
   var Burgs: BurgModule;
 }
 
-window.Burgs = new BurgModule();
+// biome-ignore lint/suspicious/noRedeclare: legacy seam
+export const Burgs = new BurgModule();
+
+window.Burgs = Burgs;

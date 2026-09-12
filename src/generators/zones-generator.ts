@@ -11,6 +11,8 @@ export interface Zone {
   type: string;
   cells: number[];
   color: string;
+  hidden?: boolean;
+  note?: string;
 }
 
 type ZoneGenerator = (usedCells: Uint8Array) => void;
@@ -39,9 +41,11 @@ class ZonesModule {
     };
   }
 
-  generate(globalModifier = 1) {
-    TIME && console.time("generateZones");
+  regenerate(globalModifier = 1): void {
+    this.generate(globalModifier);
+  }
 
+  generate(globalModifier = 1) {
     const usedCells = new Uint8Array(pack.cells.i.length);
     pack.zones = [];
 
@@ -50,8 +54,6 @@ class ZonesModule {
       let number = gauss(expectedNumber, expectedNumber / 2, 0, 100);
       while (number--) type.generate(usedCells);
     });
-
-    TIME && console.timeEnd("generateZones");
   }
 
   private addInvasion(usedCells: Uint8Array) {
@@ -436,9 +438,8 @@ class ZonesModule {
     if (!volcanoe) return;
     usedCells[volcanoe.cell] = 1;
 
-    const note = notes.find(n => n.id === `marker${volcanoe.i}`);
-    if (note) note.legend = note.legend.replace("Active volcano", "Erupting volcano");
-    const name = note ? `${note.name.replace(" Volcano", "")} Eruption` : "Volcano Eruption";
+    if (volcanoe.note) volcanoe.note = volcanoe.note.replace("Active volcano", "Erupting volcano");
+    const name = volcanoe.name ? `${volcanoe.name.replace(" Volcano", "")} Eruption` : "Volcano Eruption";
 
     const cellsArray: number[] = [];
     const queue = [volcanoe.cell];

@@ -1,3 +1,9 @@
+import { closeDialogs } from "@/components/dialog/dialog-helpers";
+import { tip } from "@/components/tooltips";
+import { savedMessage } from "@/services/platform";
+import { VERSION } from "@/services/versioning";
+import { getFileName } from "@/utils";
+
 type ExportJsonType = "Full" | "Minimal" | "PackCells" | "GridCells";
 
 const typeMap = {
@@ -22,7 +28,7 @@ function exportToJson(type: ExportJsonType): void {
   link.download = `${getFileName(type)}.json`;
   link.href = URL;
   link.click();
-  tip(`${link.download} is saved. Open "Downloads" screen (CTRL + J) to check`, true, "success", 7000);
+  tip(savedMessage(link.download), true, "success", 7000);
   window.URL.revokeObjectURL(URL);
   TIME && console.timeEnd("exportToJson");
 }
@@ -36,12 +42,10 @@ function getFullDataJson(): string {
   return JSON.stringify({
     info,
     settings,
-    mapCoordinates,
+    mapCoordinates: options.map.geography.coordinates,
     pack: packData,
     grid: gridData,
-    biomesData,
-    notes,
-    nameBases
+    nameBases: Names.nameBases
   });
 }
 
@@ -50,6 +54,7 @@ function getMinimalDataJson(): string {
   const settings = getSettings();
   const packData = {
     features: pack.features,
+    biomes: pack.biomes,
     cultures: pack.cultures,
     burgs: pack.burgs,
     states: pack.states,
@@ -61,9 +66,17 @@ function getMinimalDataJson(): string {
     markets: pack.markets,
     deals: pack.deals,
     routes: pack.routes,
-    zones: pack.zones
+    zones: pack.zones,
+    measurers: pack.measurers,
+    journeys: pack.journeys
   };
-  return JSON.stringify({ info, settings, mapCoordinates, pack: packData, biomesData, notes, nameBases });
+  return JSON.stringify({
+    info,
+    settings,
+    mapCoordinates: options.map.geography.coordinates,
+    pack: packData,
+    nameBases: Names.nameBases
+  });
 }
 
 function getPackDataJson(): string {
@@ -83,34 +96,28 @@ function getMapInfo() {
     version: VERSION,
     description: "Azgaar's Fantasy Map Generator output: azgaar.github.io/Fantasy-map-generator",
     exportedAt: new Date().toISOString(),
-    mapName: mapName.value,
-    width: graphWidth,
-    height: graphHeight,
-    seed,
-    mapId
+    mapName: options.map.lore.name,
+    width: options.map.graph.width,
+    height: options.map.graph.height,
+    seed: options.map.seed,
+    mapId: mapHistory.at(-1)?.created ?? Date.now()
   };
 }
 
 function getSettings() {
   return {
-    distanceUnit: distanceUnitInput.value,
-    distanceScale,
-    areaUnit: areaUnit.value,
-    heightUnit: heightUnit.value,
-    heightExponent: heightExponentInput.value,
-    temperatureScale: temperatureScale.value,
-    populationRate,
-    urbanization,
-    mapSize: mapSizeOutput.value,
-    latitude: latitudeOutput.value,
-    longitude: longitudeOutput.value,
-    prec: precOutput.value,
+    distanceUnit: options.map.units.distance.unit,
+    distanceScale: options.map.units.distance.scale,
+    areaUnit: options.map.units.area.unit,
+    heightUnit: options.map.units.height.unit,
+    heightExponent: options.map.units.height.exponent,
+    temperatureScale: options.map.units.temperature.unit,
+    populationRate: options.map.units.population.scale,
+    urbanization: options.map.units.population.urbanization.rate,
+    urbanDensity: options.map.units.population.urbanization.density,
     options,
-    mapName: mapName.value,
-    hideLabels: hideLabels.checked,
-    stylePreset: stylePreset.value,
-    rescaleLabels: rescaleLabels.checked,
-    urbanDensity
+    mapName: options.map.lore.name,
+    stylePreset: stylePreset.value
   };
 }
 
@@ -173,6 +180,7 @@ function getPackCellsData() {
       c: pack.vertices.c[vertexId]
     })),
     features: pack.features,
+    biomes: pack.biomes,
     cultures: pack.cultures,
     burgs: pack.burgs,
     states: pack.states,
@@ -184,7 +192,9 @@ function getPackCellsData() {
     markets: pack.markets,
     deals: pack.deals,
     routes: pack.routes,
-    zones: pack.zones
+    zones: pack.zones,
+    measurers: pack.measurers,
+    journeys: pack.journeys
   };
 }
 
@@ -218,13 +228,12 @@ function getGridCellsData() {
       v: grid.vertices.v[vertexId],
       c: grid.vertices.c[vertexId]
     })),
-    cellsDesired: grid.cellsDesired,
     spacing: grid.spacing,
     cellsY: grid.cellsY,
     cellsX: grid.cellsX,
     points: grid.points,
     boundary: grid.boundary,
-    seed: grid.seed,
+    seed: options.map.seed,
     features: pack.features
   };
   return gridData;

@@ -22,6 +22,42 @@ export const capitalize = (inputString: string) => {
 };
 
 /**
+ * Escape a string for interpolation into generated HTML, in text and attribute positions alike
+ * @param {string} inputString - The input string
+ * @returns {string} - The escaped string
+ */
+export const escapeHtml = (inputString: string): string =>
+  String(inputString ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+/**
+ * Set or remove one property in an inline style string, keeping the other declarations
+ * @param {string|null} style - The current inline style, null when not set
+ * @param {string} property - The css property name, lowercase
+ * @param {string} value - The new value; an empty string removes the property
+ * @returns {string|null} - The merged style, null when no declarations remain
+ */
+export const setInlineStyleProperty = (style: string | null, property: string, value: string): string | null => {
+  const declarations = (style || "")
+    .split(";")
+    .map(declaration => declaration.trim())
+    .filter(declaration => declaration && declaration.split(":")[0].trim().toLowerCase() !== property);
+  if (value) declarations.push(`${property}: ${value}`);
+  return declarations.join("; ") || null;
+};
+
+/**
+ * Quote a value for one CSV field, doubling any embedded quotes per RFC 4180
+ * @param {string|number} value - The value to quote
+ * @returns {string} - The quoted field
+ */
+export const toCsvField = (value: string | number): string => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+/**
  * Split a string into two parts, trying to balance their lengths
  * @param {string} inputString - The input string
  * @returns {[string, string]} - An array with two parts of the string
@@ -64,7 +100,14 @@ export const parseTransform = (string: string) => {
     .replace(/[a-z()]/g, "")
     .replace(/[ ]/g, ",")
     .split(",");
-  return [a[0] || 0, a[1] || 0, a[2] || 0, a[3] || 0, a[4] || 0, a[5] || 1];
+  return [
+    Number(a[0] || 0),
+    Number(a[1] || 0),
+    Number(a[2] || 0),
+    Number(a[3] || 0),
+    Number(a[4] || 0),
+    Number(a[5] || 1)
+  ];
 };
 
 /**
@@ -118,8 +161,7 @@ declare global {
   interface Window {
     round: typeof round;
     capitalize: typeof capitalize;
-    splitInTwo: typeof splitInTwo;
     parseTransform: typeof parseTransform;
-    sanitizeId: typeof sanitizeId;
+    setInlineStyleProperty: typeof setInlineStyleProperty;
   }
 }

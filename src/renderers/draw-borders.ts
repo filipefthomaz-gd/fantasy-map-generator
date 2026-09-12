@@ -1,6 +1,4 @@
-declare global {
-  var drawBorders: () => void;
-}
+import { select } from "d3";
 
 const bordersRenderer = () => {
   TIME && console.time("drawBorders");
@@ -72,9 +70,9 @@ const bordersRenderer = () => {
     }
   }
 
-  svg.select("#borders").attr("fill", "none").selectAll("path").remove();
-  svg.select("#stateBorders").append("path").attr("d", statePath.join(" "));
-  svg.select("#provinceBorders").append("path").attr("d", provincePath.join(" "));
+  select("#map").select("#borders").attr("fill", "none").selectAll("path").remove();
+  select("#map").select("#stateBorders").append("path").attr("d", statePath.join(" "));
+  select("#map").select("#provinceBorders").append("path").attr("d", provincePath.join(" "));
 
   function getBorder({
     type,
@@ -105,7 +103,7 @@ const bordersRenderer = () => {
       addToChecked
     });
     if (chain.length > 1) {
-      const smooth = svg.select("#borders").attr("data-smooth") === "1";
+      const smooth = styles.borders.options.smooth;
       return smooth ? buildSmoothedBorderPath(chain, vertices) : `M${chain.map(v => vertices.p[v]).join(" ")}`;
     }
 
@@ -182,4 +180,4 @@ const bordersRenderer = () => {
   TIME && console.timeEnd("drawBorders");
 };
 
-window.drawBorders = bordersRenderer;
+export { bordersRenderer as drawBorders };

@@ -35,6 +35,8 @@ export interface Good {
   icon: string;
   color: string;
   visible?: boolean; // whether the good is shown on the Goods layer
+
+  note?: string;
 }
 
 export const DEMAND_PRIORITY = ["food", "utilities", "construction", "military", "luxury"] as const;
@@ -958,10 +960,13 @@ export class GoodsModule {
   private cellId: number = 0;
   private goodById: Good[] = [];
 
+  regenerate(): void {
+    this.generate({ randomSeed: Math.random() });
+  }
+
   // Place a bonus good on every eligible cell based on the current catalogue
-  generate(options: { randomSeed?: number } = {}) {
-    TIME && console.time("generateGoods");
-    Math.random = Alea(options.randomSeed ?? seed);
+  generate(config: { randomSeed?: number } = {}) {
+    Math.random = Alea(config.randomSeed ?? options.map.seed);
     const shuffle = shuffler(() => Math.random());
 
     if (!pack.goods?.length) this.restoreDefaults();
@@ -981,7 +986,7 @@ export class GoodsModule {
 
     for (const cellId of shuffledCells) {
       if (!(cellId % 10)) shuffle(goods);
-      if (this.cells.biome[cellId] === 11 && biomesData.habitability[11] === 0) continue; // skip glaciers
+      if (this.cells.biome[cellId] === 11 && pack.biomes[11].habitability === 0) continue; // skip glaciers
       this.cellId = cellId;
 
       for (const good of goods) {
@@ -998,7 +1003,6 @@ export class GoodsModule {
       }
     }
 
-    TIME && console.timeEnd("generateGoods");
     this.sync();
   }
 
@@ -1029,7 +1033,7 @@ export class GoodsModule {
     const spread = new Function(methods, `return ${good.distribution}`);
 
     for (const cellId of shuffledCells) {
-      if (this.cells.biome[cellId] === 11 && biomesData.habitability[11] === 0) continue; // skip glaciers
+      if (this.cells.biome[cellId] === 11 && pack.biomes[11].habitability === 0) continue; // skip glaciers
       this.cellId = cellId;
 
       if (this.cells.good[cellId]) continue;
@@ -1054,8 +1058,8 @@ export class GoodsModule {
     return {
       random: (number: number) => number >= 100 || (number > 0 && number / 100 > Math.random()),
       nth: (number: number) => !(cellId % number),
-      minHabitability: (min: number) => biomesData.habitability[pack.cells.biome[cellId]] >= min,
-      habitability: () => biomesData.habitability[this.cells.biome[cellId]] > Math.random() * 100,
+      minHabitability: (min: number) => pack.biomes[pack.cells.biome[cellId]].habitability >= min,
+      habitability: () => pack.biomes[this.cells.biome[cellId]].habitability > Math.random() * 100,
       elevation: () => pack.cells.h[cellId] / 100 > Math.random(),
       biome: (...biomes: number[]) => biomes.includes(pack.cells.biome[cellId]),
       minHeight: (heigh: number) => pack.cells.h[cellId] >= heigh,
@@ -1065,7 +1069,7 @@ export class GoodsModule {
       shore: (...rings: number[]) => rings.includes(pack.cells.t[cellId]),
       type: (...types: string[]) => {
         const feature = pack.features[pack.cells.f[cellId]];
-        return types.includes(feature.group || feature.type);
+        return types.includes(feature.subtype || feature.type);
       },
       river: () => pack.cells.r[cellId]
     };

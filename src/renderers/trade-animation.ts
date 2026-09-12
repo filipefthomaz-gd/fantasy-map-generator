@@ -1,3 +1,5 @@
+import { Layers } from "@/components/layers";
+import { DEFAULT_TRADE_ANIMATION } from "@/data/trade-animation-options";
 import type { Burg } from "../generators/burgs-generator";
 import type { Deal } from "../generators/markets-generator";
 import type { Point } from "../generators/voronoi";
@@ -14,15 +16,6 @@ export type TradeBatch = {
 
 type TradePath = { points: Point[]; segments: { type: "land" | "water"; points: Point[] }[] };
 
-const DEFAULT_OPTIONS = {
-  displayType: "both",
-  concurrent: 30,
-  duration: 250,
-  landDurationModifier: 5,
-  segmentChangePause: 1000,
-  markerSize: 4
-} as const;
-
 export class TradeAnimationModule {
   private activeCount = 0;
   private generation = 0;
@@ -30,7 +23,7 @@ export class TradeAnimationModule {
   private pathCache = new Map<string, TradePath | null>();
 
   start(): void {
-    if (!layerIsOn("toggleTrade")) return;
+    if (!Layers.isOn("trade")) return;
     this.stop();
     const batches = this.getDealBatches(pack.deals);
     if (!batches.length) return;
@@ -46,26 +39,21 @@ export class TradeAnimationModule {
     clear();
   }
 
-  restart(): void {
-    this.stop();
-    this.start();
-  }
-
   sync(): void {
-    if (layerIsOn("toggleTrade")) this.start();
+    if (Layers.isOn("trade")) this.start();
     else this.stop();
   }
 
   private topUp(): void {
-    if (!layerIsOn("toggleTrade") || !this.cachedBatches) return;
-    const target = options.trade.animation.concurrent ?? DEFAULT_OPTIONS.concurrent;
+    if (!Layers.isOn("trade") || !this.cachedBatches) return;
+    const target = options.app.trade.animation.concurrent ?? DEFAULT_TRADE_ANIMATION.concurrent;
     while (this.activeCount < target) {
       if (!this.spawnOne(this.cachedBatches)) break;
     }
   }
 
   private spawnOne(batches: TradeBatch[]): boolean {
-    const type = options.trade.animation.displayType || "both";
+    const type = options.app.trade.animation.displayType || "both";
 
     while (true) {
       const enabledBatches = type === "both" ? batches : batches.filter(batch => batch.type === type);
@@ -99,7 +87,7 @@ export class TradeAnimationModule {
 
   trigger(batches: TradeBatch[]): void {
     if (!batches.length) return;
-    if (!layerIsOn("toggleTrade")) {
+    if (!Layers.isOn("trade")) {
       clear();
       return;
     }
@@ -370,7 +358,7 @@ export class TradeAnimationModule {
   }
 
   getDefaultOptions() {
-    return DEFAULT_OPTIONS;
+    return DEFAULT_TRADE_ANIMATION;
   }
 }
 
@@ -378,4 +366,6 @@ declare global {
   var TradeAnimation: TradeAnimationModule;
 }
 
-window.TradeAnimation = new TradeAnimationModule();
+// biome-ignore lint/suspicious/noRedeclare: legacy seam
+export const TradeAnimation = new TradeAnimationModule();
+window.TradeAnimation = TradeAnimation;
