@@ -15,6 +15,7 @@ export const Controllers = createRegistry({
   ColorPicker: () => import("@/controllers/color-picker").then(m => m.ColorPicker),
   ComparePrices: () => import("@/controllers/compare-prices").then(m => m.ComparePrices),
   TimelineEditor: () => import("@/controllers/timeline-editor").then(m => m.TimelineEditor),
+  TravelCalculator: () => import("@/controllers/travel-calculator").then(m => m.TravelCalculator),
   ContinentsEditor: () => import("@/controllers/continents-editor").then(m => m.ContinentsEditor),
   CulturesEditor: () => import("@/controllers/cultures-editor").then(m => m.CulturesEditor),
   DiplomacyEditor: () => import("@/controllers/diplomacy-editor").then(m => m.DiplomacyEditor),

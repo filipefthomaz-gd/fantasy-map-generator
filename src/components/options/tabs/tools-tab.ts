@@ -86,6 +86,9 @@ const TEMPLATE = /* html */ `
     <button id="editStatesButton" data-tip="Click to open States Editor" data-shortcut="Shift + S">
       States
     </button>
+    <button id="travelCalculatorButton" data-tip="Click to open the Travel Calculator: distance and travel time between two burgs by every transport" data-shortcut="Shift + W">
+      Travel
+    </button>
     <button id="openTimelineButton" data-tip="Click to open the World Timeline: save and restore snapshots of the political map">
       Timeline
     </button>
@@ -252,6 +255,7 @@ ensureEl("toolsContent").addEventListener("click", event => {
   else if (buttonId === "editCulturesButton") void Controllers.CulturesEditor.open();
   else if (buttonId === "editContinentsButton") void Controllers.ContinentsEditor.open();
   else if (buttonId === "openTimelineButton") void Controllers.TimelineEditor.open();
+  else if (buttonId === "travelCalculatorButton") void Controllers.TravelCalculator.open();
   else if (buttonId === "editReligions") void Controllers.ReligionsEditor.open();
   else if (buttonId === "editGoods") void Controllers.GoodsEditor.open();
   else if (buttonId === "editEmblemButton") void Controllers.EmblemsEditor.openDefault();
