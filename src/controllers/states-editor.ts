@@ -12,13 +12,13 @@ import {
   type TableView
 } from "@/components/dialog/table";
 import { Layers } from "@/components/layers";
+import { Notes } from "@/components/notes";
 import type { FillBoxElement } from "@/components/shared/fill-box";
 import { clearMainTip, tip } from "@/components/tooltips";
 import { applyDefaultViewboxEvents } from "@/components/viewbox-events";
 import { viewport } from "@/components/viewport";
 import { Controllers } from "@/controllers";
 import { Emblems } from "@/generators/emblems-generator";
-import { Notes } from "@/generators/notes";
 import type { Province } from "@/generators/provinces-generator";
 import type { State } from "@/generators/states-generator";
 import { redrawEmblem, redrawEmblems, removeEmblem } from "@/renderers/draw-emblems";
@@ -283,7 +283,11 @@ function renderDialog(): void {
 function closeStatesEditor(): void {
   if (customization === 3) exitAddStateMode();
   statesAnnex.exit();
+  Controllers.ColorPicker.close();
   select("#debug").selectAll(".highlight").remove();
+  const view = statesTable.view();
+  view.rows = [];
+  view.all = [];
   destroyDialog(dialogId);
 }
 
@@ -1127,6 +1131,7 @@ function toggleLegend(): void {
     .filter(s => s.i && !s.removed && s.cells)
     .sort((a, b) => (b.area ?? 0) - (a.area ?? 0))
     .map(s => [s.i, s.color, s.name]);
+  if (!data.length) return void tip("No states to show", false, "error");
   drawLegend(LEGEND_NAME, data);
 }
 
@@ -1720,7 +1725,7 @@ function openStateMergeDialog(): void {
       el.addEventListener("mouseenter", highlightStateOnMergeHover);
       el.addEventListener("mouseleave", stateHighlightOff);
     });
-  applyLineHighlighting("mergeStatesForm", ({ cellId }) => pack.cells.state[cellId]);
+  applyLineHighlighting("alert", ({ cellId }) => pack.cells.state[cellId]);
 
   function highlightStateOnMergeHover(event: any) {
     if (!Layers.isOn("states")) return;
@@ -1897,4 +1902,4 @@ function updateLockStatus(stateId: number, classList: DOMTokenList): void {
   classList.toggle("icon-lock");
 }
 
-export const StatesEditor = { open };
+export const StatesEditor = { open, showChart: showStatesChart };

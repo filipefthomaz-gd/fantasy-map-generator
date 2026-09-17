@@ -2,7 +2,7 @@
 import { select } from "d3";
 import { destroyDialog } from "@/components/dialog/dialog-helpers";
 import { Seasons } from "@/components/seasons";
-import type { Feature } from "@/generators/features";
+import type { Feature } from "@/generators/features-generator";
 import type { Point } from "@/generators/voronoi";
 import {
   cellArea,

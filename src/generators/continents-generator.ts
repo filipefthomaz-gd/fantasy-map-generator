@@ -1,5 +1,5 @@
 import { getColors, getRandomColor } from "../utils";
-import type { Feature } from "./features";
+import type { Feature } from "./features-generator";
 
 declare global {
   var Continents: ContinentsModule;

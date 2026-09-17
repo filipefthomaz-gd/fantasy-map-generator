@@ -3,7 +3,9 @@ import { closeDialogs, destroyDialog } from "@/components/dialog/dialog-helpers"
 import { tip } from "@/components/tooltips";
 import { UndoRedo } from "@/services/undo-redo";
 import { downloadFile, escapeHtml, getFileName, speak, uploadFile } from "@/utils";
-import { ensureEl, openURL, rn, unique } from "../utils";
+import { createFileInput, ensureEl, openURL, rn, unique } from "../utils";
+
+let namesbaseInput: HTMLInputElement | null = null;
 
 const HISTORY_KEY = "namesbase";
 
@@ -133,8 +135,6 @@ function renderDialog(): void {
     </div>`;
   ensureEl("dialogs").insertAdjacentHTML("beforeend", editorHtml);
 
-  const uploader = ensureEl<HTMLInputElement>("namesbaseToLoad");
-
   ensureEl("namesbaseSelect").addEventListener("change", updateInputs);
   ensureEl("namesbaseTextarea").addEventListener("change", updateNamesData);
   ensureEl("namesbaseUpdateExamples").addEventListener("click", updateExamples);
@@ -149,18 +149,8 @@ function renderDialog(): void {
   ensureEl("namesbaseAnalyze").addEventListener("click", analyzeNamesbase);
   ensureEl("namesbaseDefault").addEventListener("click", namesbaseRestoreDefault);
   ensureEl("namesbaseDownload").addEventListener("click", namesbaseDownload);
-  ensureEl("namesbaseUpload").addEventListener("click", () => {
-    uploader.addEventListener("change", e => uploadFile(e.target as HTMLInputElement, d => namesbaseUpload(d, true)), {
-      once: true
-    });
-    uploader.click();
-  });
-  ensureEl("namesbaseUploadExtend").addEventListener("click", () => {
-    uploader.addEventListener("change", e => uploadFile(e.target as HTMLInputElement, d => namesbaseUpload(d, false)), {
-      once: true
-    });
-    uploader.click();
-  });
+  ensureEl("namesbaseUpload").addEventListener("click", () => pickNamesbaseFile(true));
+  ensureEl("namesbaseUploadExtend").addEventListener("click", () => pickNamesbaseFile(false));
   ensureEl("namesbaseCA").addEventListener("click", () =>
     openURL("https://cartographyassets.com/asset-category/specific-assets/azgaars-generator/namebases/")
   );
@@ -400,6 +390,13 @@ function namesbaseDownload(): void {
   const data = Names.nameBases.map(b => `${b.name}|${b.min}|${b.max}|${b.d}|${b.m}|${b.b}`).join("\r\n");
   const name = `${getFileName("Namesbase")}.txt`;
   downloadFile(data, name);
+}
+
+/** Own the namesbase file input here so repeat opens cannot stack listeners on a shared element */
+function pickNamesbaseFile(extend: boolean): void {
+  namesbaseInput ??= createFileInput(".txt");
+  namesbaseInput.onchange = () => uploadFile(namesbaseInput!, data => namesbaseUpload(data, extend));
+  namesbaseInput.click();
 }
 
 function namesbaseUpload(dataLoaded: string, override = true): void {
