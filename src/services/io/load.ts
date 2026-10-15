@@ -1,6 +1,7 @@
 import { select } from "d3";
 import { fitMapToScreen } from "@/components/canvas";
 import { closeDialogs } from "@/components/dialog/dialog-helpers";
+import { Icons } from "@/components/icons";
 import { Layers } from "@/components/layers";
 import { registerMap } from "@/components/lifecycle";
 import { pickMapFile } from "@/components/options/io-panes";
@@ -10,9 +11,13 @@ import { clearMainTip, tip } from "@/components/tooltips";
 import { undraw } from "@/components/undraw";
 import { applyDefaultViewboxEvents } from "@/components/viewbox-events";
 import { resetZoom } from "@/components/zoom";
+import { Controllers } from "@/controllers";
 import { GraphOverride } from "@/generators/graph-override";
+import { Styles } from "@/generators/styles";
 import { onLegendClick } from "@/renderers/draw-legend";
+import { applyVignetteOptions } from "@/renderers/draw-vignette";
 import { zonesFilter } from "@/renderers/draw-zones";
+import { HeightmapColorSchemes } from "@/renderers/heightmap-color-schemes";
 import { Services } from "@/services";
 import { declareFont } from "@/services/fonts";
 import { logStats } from "@/services/logging";
@@ -288,7 +293,7 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     if (!settings) throw new Error("Map settings are missing or malformed");
     Options.applyLoaded(settings);
     syncOptionInputs();
-    setStylePresetSelect();
+    await Controllers.StylePresetsEditor.init(); // the preset row follows the loaded map
 
     INFO && console.group(options.map.seed ? `Loaded Map ${options.map.seed}` : "Loaded Map");
     isLogGroupOpen = true;
@@ -309,6 +314,7 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     undraw(); // every layer releases its scene and content before the loaded map takes over
     select("#map").remove();
     document.body.insertAdjacentHTML("afterbegin", data[5]);
+    ensureEl("map").dataset.layer = "map"; // pre-1.154 maps lack it, and styles address the root by it
     zonesFilter.type = "all"; // the dropped map's zone types say nothing about the loaded one
 
     // TODO: check if we need it or if LayersRegistry resolves it automatically?
@@ -408,15 +414,16 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
       Continents.generate();
     }
 
-    if (data[31]) {
-      const namesDL = data[31].split("/");
-      namesDL.forEach((d, i) => {
-        const e = d.split("|");
-        if (!e.length) return;
-        const b = e[5].split(",").length > 2 || !Names.nameBases[i] ? e[5] : Names.nameBases[i].b;
-        Names.nameBases[i] = { name: e[0], i, min: +e[1], max: +e[2], d: e[3], m: +e[4], b };
-      });
-    }
+    // save omits names that equal the default base at the same index
+    const defaultNameBases = Names.getNameBases();
+    Names.nameBases = data[31]
+      ? data[31].split("/").map((d, i) => {
+          const e = d.split("|");
+          const b = e[5].split(",").length > 2 || !defaultNameBases[i] ? e[5] : defaultNameBases[i].b;
+          return { name: e[0], i, min: +e[1], max: +e[2], d: e[3], m: +e[4], b };
+        })
+      : defaultNameBases;
+    Names.clearChains();
 
     // data[45]: custom good icons. #good-icons lives outside the replaced map svg, clear the previous set
     const goodIconsDefs = document.getElementById("good-icons");
@@ -429,6 +436,9 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
 
     const styleRecord = data[48] ? safeParseJSON(data[48]) : undefined; // data[48] should be already migrated by auto-update
     Styles.set(Styles.parse(styleRecord));
+    await Controllers.StylePresetsEditor.ensureGroupStyles();
+
+    Icons.syncCustom();
 
     if (data[50]) Layers.restore(JSON.parse(data[50]));
     if (data[51]) GraphOverride.restore(JSON.parse(data[51]));
@@ -447,16 +457,11 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
       .on("click", onLegendClick);
 
     // add custom heightmap color scheme if any
-    if (heightmapColorSchemes) {
-      for (const { scheme } of [styles.heightmap.oceanHeights.options, styles.heightmap.landHeights.options]) {
-        if (scheme && !(scheme in heightmapColorSchemes)) addCustomColorScheme(scheme);
-      }
-    }
-
-    {
-      // add custom texture if any
-      const textureHref = styles.texture.options.href;
-      if (textureHref) updateTextureSelectValue(textureHref);
+    for (const { scheme } of [
+      styles.heightmap.groups.oceanHeights.options,
+      styles.heightmap.groups.landHeights.options
+    ]) {
+      HeightmapColorSchemes.ensure(scheme);
     }
 
     // data integrity checks
@@ -647,11 +652,11 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
         p.removed = true;
       });
 
-      pack.routes.forEach(route => {
-        if (!route.points || route.points.length < 2) {
-          ERROR && console.error(`[Data integrity] Route ${route.i} has less than 2 points. Removing the route`);
-          Routes.remove(route);
-        }
+      // drop the broken route object only: a valid route may share its id. Its cell links are cleaned below
+      pack.routes = pack.routes.filter(route => {
+        if (route.points?.length >= 2) return true;
+        ERROR && console.error(`[Data integrity] Route ${route.i} has less than 2 points. Removing the route`);
+        return false;
       });
 
       for (const from in pack.cells.routes) {
@@ -715,7 +720,8 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     }
 
     Layers.drawAll();
-    applyStoredStyles();
+    Styles.writeAll();
+    applyVignetteOptions(); // the vignette mask is renderer-owned; its applier shapes it from the store
     applyPerformanceSettings(); // the file's SVG carries the attributes of the browser that saved it
     applyDefaultViewboxEvents();
     fitMapToScreen();

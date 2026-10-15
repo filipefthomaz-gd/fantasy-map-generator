@@ -1,8 +1,8 @@
 import { select } from "d3";
 import { Layers } from "@/components/layers";
 import { MapEntities } from "@/components/map-entities";
-import { Notes } from "@/components/notes";
 import { Seasons } from "@/components/seasons";
+import { Notes } from "@/generators/notes";
 import { RESOURCES } from "@/generators/resources-generator";
 import { highlightEmblemElement } from "@/renderers/overlays/highlight";
 import type { Point } from "@/types/global";

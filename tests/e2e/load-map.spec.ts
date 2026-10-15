@@ -1,13 +1,18 @@
 import { test, expect, type Page } from "@playwright/test";
 import fs from "fs";
 import path from "path";
-import { waitForMap } from "./wait-for-map";
+import { countMaps, waitForMap, waitForNextMap } from "./wait-for-map";
 
 declare const style: { relief: { set: string; size: number; density: number } };
 
 const LEGACY_RELIEF_ICONS = [
   { icon: "relief-mount-1", x: 100, y: 100, s: 20 },
   { icon: "relief-hill-1", x: 200, y: 150, s: 10 }
+];
+// v1.154.0 format at the legacy size 2: the base size is halved around the kept centre
+const MIGRATED_RELIEF_ICONS = [
+  { type: "mount", x: 105, y: 105, s: 10 },
+  { type: "hill", x: 202.5, y: 152.5, s: 5 }
 ];
 
 // The legacy added labels in 1.139.4.map are the text elements label1..label4. No fixture carries a
@@ -459,13 +464,13 @@ test.describe("Map loading", () => {
     const migrated = await page.evaluate(() => {
       const labels = options.map.labels;
       return {
-        resizeOnZoom: labels.resizeOnZoom,
+        keys: Object.keys(labels), // resizeOnZoom was retired in v1.154.0: the zoom sizes all text
         showAll: options.app.labels.showAll,
         stateMode: labels.groups.find(group => group.type === "state")?.mode
       };
     });
 
-    expect(migrated).toEqual({ resizeOnZoom: false, showAll: false, stateMode: "full" });
+    expect(migrated).toEqual({ keys: ["groups"], showAll: false, stateMode: "full" });
   });
 
   // v1.142.0 moved relief icons from the #terrain group to pack.relief and renders only the ones
@@ -479,7 +484,7 @@ test.describe("Map loading", () => {
     await expect(page.locator("#tooltip")).toContainText("Map is successfully loaded", { timeout: 120000 });
 
     expect(await getReliefState(page)).toEqual({
-      relief: LEGACY_RELIEF_ICONS,
+      relief: MIGRATED_RELIEF_ICONS,
       style: { set: "simple", size: 2, density: 0.5 },
       layerIsOn: true,
       terrainStyle: null
@@ -495,7 +500,7 @@ test.describe("Map loading", () => {
     await expect(page.locator("#tooltip")).toContainText("Map is successfully loaded", { timeout: 120000 });
 
     expect(await getReliefState(page)).toEqual({
-      relief: LEGACY_RELIEF_ICONS,
+      relief: MIGRATED_RELIEF_ICONS,
       style: { set: "simple", size: 2, density: 0.5 },
       layerIsOn: false,
       terrainStyle: "display: none;"
@@ -597,5 +602,36 @@ test.describe("Map loading", () => {
         !e.includes("Failed to load resource")
     );
     expect(criticalErrors).toEqual([]);
+  });
+
+  // a .map stores no names for a base equal to the default at its index, so a session's own bases must not fill them
+  test("loading a map should restore default namebases over the session's ones", async ({ page }) => {
+    await waitForMap(page);
+    await page.evaluate(() => {
+      const Names = (window as any).Names;
+      Names.nameBases = [{ name: "Custom", i: 0, min: 4, max: 8, d: "", m: 0, b: "Aaa,Bbb,Ccc" }];
+      Names.getBase(0); // caches the custom chain
+    });
+
+    const maps = await countMaps(page);
+    await page.locator("#mapToLoad").setInputFiles(path.join(__dirname, "../fixtures/1.154.0.map"));
+    await waitForNextMap(page, maps);
+
+    const result = await page.evaluate(() => {
+      const Names = (window as any).Names;
+      const defaults = Names.getNameBases();
+      return {
+        count: Names.nameBases.length,
+        matchDefaults: Names.nameBases.every((base: any, i: number) => base.b === defaults[i].b),
+        chainFromDefault:
+          !Names.chains[0] ||
+          JSON.stringify(Object.entries(Names.chains[0])) ===
+            JSON.stringify(Object.entries(Names.calculateChain(defaults[0].b)))
+      };
+    });
+
+    expect(result.count).toBe(43);
+    expect(result.matchDefaults).toBe(true);
+    expect(result.chainFromDefault).toBe(true);
   });
 });

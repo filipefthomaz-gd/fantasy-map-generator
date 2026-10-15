@@ -100,7 +100,7 @@ function renderDialog(): void {
   });
 
   ensureEl("continentsEditorRefresh").addEventListener("click", refreshEditor);
-  ensureEl("continentsEditStyle").addEventListener("click", () => editStyle("conts"));
+  ensureEl("continentsEditStyle").addEventListener("click", () => void Controllers.StyleEditor.open("continents"));
   ensureEl("continentsLegend").addEventListener("click", toggleLegend);
   ensureEl("continentsPercentage").addEventListener("click", togglePercentageMode);
   ensureEl("continentsManually").addEventListener("click", openPaintEditor);

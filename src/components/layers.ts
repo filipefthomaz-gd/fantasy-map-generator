@@ -23,7 +23,7 @@ import { drawMeasurers } from "@/renderers/draw-measurers";
 import { drawMilitary } from "@/renderers/draw-military";
 import { drawOcean, removeOcean } from "@/renderers/draw-ocean";
 import { drawPopulation } from "@/renderers/draw-population";
-import { drawPrecipitation, removePrecipitation } from "@/renderers/draw-precipitation";
+import { drawPrecipitation } from "@/renderers/draw-precipitation";
 import { drawProvinces } from "@/renderers/draw-provinces";
 import { drawRelief, removeRelief } from "@/renderers/draw-relief-icons";
 import { drawReligions } from "@/renderers/draw-religions";
@@ -169,19 +169,24 @@ export class LayersRegistry<Id extends string = string> {
   /** draw the listed layers that are ON, always in layer order */
   draw(...ids: Id[]): void {
     for (const layer of this.layers) {
-      if (ids.includes(layer.id) && this.active.has(layer.id)) layer.params.draw?.(layer);
+      if (!layer.params.draw || !ids.includes(layer.id) || !this.active.has(layer.id)) continue;
+      const start = performance.now();
+      layer.params.draw(layer);
+      performance.measure(layer.id, { start, detail: "Layers" });
     }
   }
 
   drawAll(): void {
     INFO && console.group("Layers Rendering");
     TIME && console.time("Layers Rendering");
+    const start = performance.now();
 
     try {
       this.draw(...this.layers.map(layer => layer.id));
     } finally {
       // a throwing renderer must not leave the group open: every later render would nest inside it
       TIME && console.timeEnd("Layers Rendering");
+      performance.measure("Layers Rendering", { start });
       INFO && console.groupEnd();
     }
   }
@@ -258,8 +263,10 @@ export class LayersRegistry<Id extends string = string> {
 
   /** default teardown: drop the content, keeping the declared skeleton */
   private eraseContent(layer: Layer<Id>): void {
+    const group = findEl<SVGGElement>(layer.elementId);
+    if (!group) return; // an incomplete SVG has no content to clear for this layer
     const declared = layer.children.map(child => child.id);
-    for (const child of Array.from(layer.getEl().children)) {
+    for (const child of Array.from(group.children)) {
       if (declared.includes(child.id)) child.replaceChildren();
       else child.remove();
     }
@@ -331,7 +338,7 @@ const mapLayers = [
   new Layer({
     id: "routes",
     parent: "viewbox",
-    children: ["roads", "trails", "searoutes", "railways", "airways"].map(id => ({ id, tag: "g" })),
+    children: ["trails", "roads", "searoutes", "railways", "airways"].map(id => ({ id, tag: "g" })),
     draw: drawRoutes,
     erase: removeRoutes
   }),
@@ -366,13 +373,7 @@ const mapLayers = [
     draw: () => TradeAnimation.start(),
     erase: () => TradeAnimation.stop()
   }),
-  new Layer({
-    id: "precipitation",
-    element: "prec",
-    parent: "viewbox",
-    draw: drawPrecipitation,
-    erase: removePrecipitation
-  }),
+  new Layer({ id: "precipitation", element: "prec", parent: "viewbox", draw: drawPrecipitation }),
   new Layer({ id: "climate", parent: "viewbox", draw: drawClimate }),
   new Layer({
     id: "population",
@@ -387,23 +388,16 @@ const mapLayers = [
     draw: drawEmblems,
     erase: removeEmblems
   }),
-  new Layer({
-    id: "burgIcons",
-    element: "icons",
-    parent: "viewbox",
-    children: ["burgIcons", "anchors"].map(id => ({ id, tag: "g" })),
-    draw: drawBurgIcons
-  }),
+  new Layer({ id: "burgIcons", parent: "viewbox", draw: drawBurgIcons }),
   new Layer({
     id: "labels",
     parent: "viewbox",
-    attrs: { "font-size": "100px" },
     draw: drawLabels,
     erase: removeLabels
   }),
   new Layer({ id: "military", element: "armies", parent: "viewbox", draw: drawMilitary }),
-  new Layer({ id: "markers", parent: "viewbox", draw: drawMarkers }),
   new Layer({ id: "fogging", parent: "viewbox", attrs: { mask: "url(#fog)" }, permanent: true, draw: drawFogging }),
+  new Layer({ id: "markers", parent: "viewbox", draw: drawMarkers }),
   new Layer({ id: "journeys", parent: "viewbox", draw: drawJourneys }),
   new Layer({ id: "rulers", element: "ruler", parent: "viewbox", draw: drawMeasurers }),
   new Layer({ id: "debug", parent: "viewbox", permanent: true, keepContent: true }),
@@ -424,7 +418,7 @@ declare global {
   var Layers: LayersRegistry<LayerId>;
 }
 
-// biome-ignore lint/suspicious/noRedeclare: legacy seam for public/modules/**/*.js
+// biome-ignore lint/suspicious/noRedeclare: legacy seam, exposed on window
 export const Layers = new LayersRegistry(mapLayers);
 
 window.Layers = Layers;

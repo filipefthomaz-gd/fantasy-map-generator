@@ -77,8 +77,7 @@ function handlePointsInput(e: Event): void {
 }
 
 function generateSubmap(): void {
-  const { scale, x: viewX, y: viewY } = viewport;
-  const [x0, y0] = [Math.abs(viewX / scale), Math.abs(viewY / scale)]; // top-left corner
+  const { x0, y0, scale } = getSubmapRegion();
   const points = +ensureEl<HTMLInputElement>("submapPointsInput").value;
   const rescaleBurgs = ensureEl<HTMLInputElement>("submapRescaleBurgStyles").checked;
   resample({ x0, y0, scale, points, rescaleBurgs });
@@ -141,6 +140,23 @@ function resample({ x0, y0, scale, points, rescaleBurgs }: ResampleParams): void
   INFO && console.groupEnd();
 }
 
+/**
+ * The part of the map that becomes the submap: what is on screen, widened along one axis to the canvas
+ * proportions and kept inside the map. `scale` is the parent-to-submap factor, as the canvas is kept
+ */
+function getSubmapRegion(): { x0: number; y0: number; scale: number } {
+  const { width, height } = options.map.graph;
+  const visibleWidth = viewport.width / viewport.scale;
+  const visibleHeight = viewport.height / viewport.scale;
+  const scale = Math.min(width / visibleWidth, height / visibleHeight);
+
+  const regionWidth = width / scale;
+  const regionHeight = height / scale;
+  const x0 = minmax(-viewport.x / viewport.scale - (regionWidth - visibleWidth) / 2, 0, width - regionWidth);
+  const y0 = minmax(-viewport.y / viewport.scale - (regionHeight - visibleHeight) / 2, 0, height - regionHeight);
+  return { x0, y0, scale };
+}
+
 function recalculateMapSize(x0: number, y0: number, scale: number): void {
   const { geography, graph, units } = options.map;
   const { coordinates } = geography;
@@ -162,7 +178,7 @@ function recalculateMapSize(x0: number, y0: number, scale: number): void {
 function rescaleBurgStyles(scale: number): void {
   window.Burgs.ensureBurgGroupStyles(); // a group without a store entry would silently skip the rescale
   for (const group of ensureEl("burgIcons").querySelectorAll<SVGGElement>(":scope > g")) {
-    const iconStyle = styles.burgIcons.burgIcons.groups[group.id];
+    const iconStyle = styles.burgIcons.groups[group.id]?.groups.icons;
     if (iconStyle) iconStyle.options.size = rn(minmax(iconStyle.options.size * scale, 0.2, 10), 2);
     group.remove();
   }

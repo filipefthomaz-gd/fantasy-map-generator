@@ -228,7 +228,7 @@ function applyChange(change: Partial<CoastlineSettings>): void {
   UndoRedo.push(historyKey(), currentSnapshot());
   if (selectedFeature) {
     const firstChange = !selectedFeature.coastline; // the feature gets its own settings
-    selectedFeature.coastline = { ...(selectedFeature.coastline || Coastline.settings), ...change };
+    Features.setCoastline(selectedFeature.i, change);
     drawFeaturePath(selectedFeature);
     if (firstChange) syncScope();
   } else {
@@ -243,7 +243,7 @@ function applyChange(change: Partial<CoastlineSettings>): void {
 function dropOwnSettings(): void {
   if (!selectedFeature) return;
   UndoRedo.push(historyKey(), currentSnapshot());
-  delete selectedFeature.coastline;
+  Features.setCoastline(selectedFeature.i, null);
   drawFeaturePath(selectedFeature);
   syncScope();
   syncForm();

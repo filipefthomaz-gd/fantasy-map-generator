@@ -448,7 +448,8 @@ function onTableClick(event: Event): void {
   const fromBurg = pack.burgs[pack.cells.burg[from]];
   const toBurg = pack.burgs[pack.cells.burg[to]];
   journey.name = `${fromBurg?.name ?? "?"} to ${toBurg?.name ?? "?"}`;
-  const segment = Journeys.addSegment(journey);
+  const segmentId = Journeys.addSegment(journey.i);
+  const segment = journey.segments.find(seg => seg.i === segmentId)!;
   Object.assign(segment, {
     name: `By ${transport.name}`,
     from,
