@@ -1,5 +1,7 @@
 import type { StylesData } from "@/types/styles";
-import { createEl, ensureEl } from "@/utils/nodeUtils";
+import { createEl, ensureEl, findEl } from "@/utils/node-utils";
+
+import { cacheOceanLayer, clearOceanCache } from "./ocean-cache";
 
 type CoastalBands = StylesData["ocean"]["options"]["bands"];
 
@@ -12,9 +14,10 @@ function bandRadius(bands: CoastalBands, index: number): number {
 }
 
 export function removeCoastalBands(): void {
+  clearOceanCache("oceanBands");
   ensureEl("oceanBands").replaceChildren();
   for (const id of ["coastal-bands-mask", "coastal-bands-lines", "coastal-bands-shade"]) {
-    document.getElementById(id)?.remove();
+    findEl(id)?.remove();
   }
 }
 
@@ -72,4 +75,5 @@ export function drawCoastalBands(): void {
   group.innerHTML = `<rect width="${width}" height="${height}" data-band="shade" fill="${bands.shore}"
     fill-opacity="${bands.shade}" mask="url(#coastal-bands-shade)" />
     <rect width="${width}" height="${height}" fill="${bands.color}" mask="url(#coastal-bands-lines)" />`;
+  cacheOceanLayer(group, ["coastal-bands-mask", "coastal-bands-lines", "coastal-bands-shade"]);
 }

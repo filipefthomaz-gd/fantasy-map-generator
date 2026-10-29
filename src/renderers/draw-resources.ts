@@ -1,5 +1,7 @@
-import { RESOURCES } from "@/generators/resources-generator";
-import { ensureEl, getIsolines } from "@/utils";
+import { RESOURCES, Resources } from "@/model/physical/resources-generator";
+import { log } from "@/utils/logger";
+import { ensureEl } from "@/utils/node-utils";
+import { getIsolines } from "@/utils/path-utils";
 import { buildFillPaths } from "./isoline-fills";
 
 const TARGET_ICONS = 600; // emoji icons are sampled so the layer stays readable on dense maps
@@ -7,7 +9,7 @@ const EMOJI_FONTS = "'Apple Color Emoji','Noto Color Emoji','Segoe UI Emoji','Se
 
 /** Colored fills per resource, masked to land, with sampled emoji icons labelling the regions */
 export function drawResources(): void {
-  TIME && console.time("drawResources");
+  log.time("drawResources");
   const { cells } = pack;
   if (!cells.resource) Resources.generate();
   const resource = cells.resource!;
@@ -30,5 +32,5 @@ export function drawResources(): void {
   ensureEl("resources").innerHTML =
     `<g mask="url(#land)">${fills}</g>` +
     `<g id="resourceIcons" font-family="${EMOJI_FONTS}" pointer-events="none">${icons}</g>`;
-  TIME && console.timeEnd("drawResources");
+  log.timeEnd("drawResources");
 }

@@ -1,9 +1,11 @@
-import { Seasons } from "@/components/seasons";
-import { ensureEl, getIsolines } from "@/utils";
+import { Seasons } from "@/renderers/seasons";
+import { log } from "@/utils/logger";
+import { ensureEl } from "@/utils/node-utils";
+import { getIsolines } from "@/utils/path-utils";
 import { buildFillPaths } from "./isoline-fills";
 
 export function drawBiomes(): void {
-  TIME && console.time("drawBiomes");
+  log.time("drawBiomes");
 
   const isolines = getIsolines(pack, cellId => pack.cells.biome[cellId], { fill: true, waterGap: true });
   ensureEl("biomes").innerHTML = buildFillPaths(
@@ -12,5 +14,5 @@ export function drawBiomes(): void {
     index => Seasons.getBiomeColor(index) ?? pack.biomes[index].color
   );
 
-  TIME && console.timeEnd("drawBiomes");
+  log.timeEnd("drawBiomes");
 }

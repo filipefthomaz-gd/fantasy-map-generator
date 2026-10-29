@@ -1,9 +1,13 @@
 import { curveBasisClosed, line } from "d3";
-import { Ocean } from "@/generators/ocean-generator";
-import { rn, round } from "@/utils";
-import { ensureEl } from "@/utils/nodeUtils";
+import { Grid } from "@/model/graph/grid-generator";
+import { Ocean } from "@/model/physical/ocean-generator";
+import { log } from "@/utils/logger";
+import { ensureEl, findEl } from "@/utils/node-utils";
+import { rn } from "@/utils/number-utils";
+import { round } from "@/utils/string-utils";
 import { getCoastalDistances, getCoastalWaves } from "./coastal-waves";
 import { drawCoastalBands, getCoastalBandReach, removeCoastalBands } from "./draw-coastal-bands";
+import { cacheOceanLayer, clearOceanCache } from "./ocean-cache";
 
 /**
  * The two full-graph rects the rings are drawn over: the textured pattern fill and the flat base
@@ -72,7 +76,7 @@ export function drawOcean(): void {
   const limits = Ocean.getLimits(styles.ocean.groups.oceanLayers.options.outline);
   if (!limits.length) return;
 
-  TIME && console.time("drawOcean");
+  log.time("drawOcean");
 
   const opacity = rn(0.4 / limits.length, 2);
   const lineGen = line().curve(curveBasisClosed);
@@ -83,7 +87,7 @@ export function drawOcean(): void {
 
   oceanLayers.insertAdjacentHTML("beforeend", paths.join(""));
 
-  TIME && console.timeEnd("drawOcean");
+  log.timeEnd("drawOcean");
 }
 
 /** drop the rings, waves and bands, keeping the two full-graph rects drawOceanBase owns */
@@ -94,8 +98,9 @@ export function removeOcean(): void {
 }
 
 function removeCoastalWaves(): void {
+  clearOceanCache("oceanWaves");
   ensureEl("oceanWaves").replaceChildren();
-  document.getElementById("waves-mask")?.remove();
+  findEl("waves-mask")?.remove();
 }
 
 /** sparse wave dashes clipped to the sea, with a clear gap along the coast */
@@ -105,16 +110,14 @@ function drawCoastalWaves(): void {
   if (!waveOptions.render) return;
   const group = ensureEl<SVGGElement>("oceanWaves");
 
-  TIME && console.time("drawCoastalWaves");
+  log.time("drawCoastalWaves");
   const { width, height } = options.map.graph;
-  const { spacing, cellsX, cellsY, cells, features } = grid;
+  const { spacing, cells, features } = grid;
   const bandReach = getCoastalBandReach(styles.ocean.options.bands);
   const bandCells = bandReach / spacing;
   const distances = getCoastalDistances(cells.h, cells.c, waveOptions.reach * 2 + bandCells);
   const distanceAt = (x: number, y: number): number => {
-    const column = Math.max(0, Math.min(cellsX - 1, Math.floor(x / spacing)));
-    const row = Math.max(0, Math.min(cellsY - 1, Math.floor(y / spacing)));
-    const cell = row * cellsX + column;
+    const cell = Grid.findCell(x, y);
     if (cells.h[cell] >= 20 || features[cells.f[cell]]?.type === "lake") return 0;
     return distances[cell] ? Math.max(1, distances[cell] - bandCells) : Infinity;
   };
@@ -147,5 +150,6 @@ function drawCoastalWaves(): void {
         attrs["stroke-dasharray"] ? ` stroke-dasharray="${attrs["stroke-dasharray"]}"` : ""
       } opacity="${attrs.opacity ?? 1}" stroke-linecap="round" mask="url(#waves-mask)"></path>`
     : "";
-  TIME && console.timeEnd("drawCoastalWaves");
+  cacheOceanLayer(group, ["waves-mask"]);
+  log.timeEnd("drawCoastalWaves");
 }

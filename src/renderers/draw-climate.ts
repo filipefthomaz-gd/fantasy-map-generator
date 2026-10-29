@@ -1,4 +1,5 @@
-import { ensureEl } from "@/utils";
+import { log } from "@/utils/logger";
+import { ensureEl } from "@/utils/node-utils";
 
 /** Climate overlay: ITCZ and wind-zone boundaries, prevailing wind arrows and Ekman-deflected ocean currents */
 export function drawClimate(): void {
@@ -6,7 +7,7 @@ export function drawClimate(): void {
   const { winds } = options.map.climate;
   const { width: graphWidth, height: graphHeight } = options.map.graph;
   if (!latT) return;
-  TIME && console.time("drawClimate");
+  log.time("drawClimate");
 
   const WIND_SPACING = 80;
   const ZONE_NAMES = ["N. Polar", "Westerlies", "NE Trades", "SE Trades", "Westerlies", "S. Polar"];
@@ -99,5 +100,5 @@ export function drawClimate(): void {
 
   ensureEl("climate").innerHTML = parts.join("");
 
-  TIME && console.timeEnd("drawClimate");
+  log.timeEnd("drawClimate");
 }

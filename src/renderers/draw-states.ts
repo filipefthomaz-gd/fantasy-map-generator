@@ -1,10 +1,12 @@
 import { color as d3Color } from "d3";
-import { ensureEl, getIsolines } from "@/utils";
+import { log } from "@/utils/logger";
+import { ensureEl } from "@/utils/node-utils";
+import { getIsolines } from "@/utils/path-utils";
 import { buildFillPaths } from "./isoline-fills";
 import { applyStateFocusFilters } from "./overlays/state-focus";
 
 export function drawStates(): void {
-  TIME && console.time("drawStates");
+  log.time("drawStates");
   const { cells, states } = pack;
 
   const renderHalo = options.app.performance.stateHalos;
@@ -27,5 +29,5 @@ export function drawStates(): void {
   ensureEl("statesHalo").innerHTML = haloPaths.join("");
   applyStateFocusFilters();
 
-  TIME && console.timeEnd("drawStates");
+  log.timeEnd("drawStates");
 }

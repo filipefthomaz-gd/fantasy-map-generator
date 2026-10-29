@@ -1,5 +1,10 @@
-import { color, curveBasisClosed, interpolateYlOrRd, line, select } from "d3";
-import { connectVertices, ensureEl, getIsolines, round, si } from "../utils";
+import { color, curveBasisClosed, interpolateYlOrRd, line, type Selection, select } from "d3";
+import type { PackedGraph } from "@/types/packed-graph";
+import { log } from "@/utils/logger";
+import { ensureEl } from "@/utils/node-utils";
+import { si } from "@/utils/number-utils";
+import { connectVertices, getIsolines } from "@/utils/path-utils";
+import { round } from "@/utils/string-utils";
 
 const LEVELS = 12;
 const SWATCH_SIZE = 10;
@@ -16,7 +21,7 @@ let populationMode: PopulationMode = "province";
 const population = () => select(ensureEl<SVGGElement>("population"));
 
 export function drawPopulation(): void {
-  TIME && console.time("drawPopulation");
+  log.time("drawPopulation");
 
   population().selectAll("*").remove();
 
@@ -63,14 +68,14 @@ export function drawPopulation(): void {
     drawLegend(thresholds, distUnit);
   }
 
-  TIME && console.timeEnd("drawPopulation");
+  log.timeEnd("drawPopulation");
 }
 
 // ─── Cell mode ───────────────────────────────────────────────────────────────
 
 function buildCellDensity(
-  cells: any,
-  burgs: any[],
+  cells: PackedGraph["cells"],
+  burgs: PackedGraph["burgs"],
   urbanizationRate: number,
   n: number,
   smoothPasses = 2
@@ -132,8 +137,8 @@ function buildCellDensity(
 
 // Returns people/km² indexed by province ID.
 function buildProvinceDensities(
-  cells: any,
-  burgs: any[],
+  cells: PackedGraph["cells"],
+  burgs: PackedGraph["burgs"],
   urbanizationRate: number,
   popRate: number,
   dScale: number
@@ -171,7 +176,7 @@ function drawProvinceLayers(provDensity: Float64Array, thresholds: number[]): vo
   // One path per province, colored by its density bucket — no smoothing, exact borders
   const isolines = getIsolines(pack, (cellId: number) => pack.cells.province[cellId], { fill: true });
 
-  for (const [provIdStr, isoline] of Object.entries(isolines) as [string, any][]) {
+  for (const [provIdStr, isoline] of Object.entries(isolines)) {
     const pId = +provIdStr;
     const pDensity = provDensity[pId];
     if (!pDensity || !isoline.fill) continue;
@@ -264,7 +269,13 @@ function buildThresholds(density: Float32Array): number[] {
   }).filter((t, i, arr) => i === 0 || t > arr[i - 1] * 1.05);
 }
 
-function drawDensityLayers(density: Float32Array, thresholds: number[], cells: any, vertices: any, n: number): void {
+function drawDensityLayers(
+  density: Float32Array,
+  thresholds: number[],
+  cells: PackedGraph["cells"],
+  vertices: PackedGraph["vertices"],
+  n: number
+): void {
   const lineGen = line<[number, number]>().curve(curveBasisClosed);
   const levels = thresholds.length;
   if (!levels) return;
@@ -307,8 +318,8 @@ function drawDensityLayers(density: Float32Array, thresholds: number[], cells: a
 function findStart(
   cellId: number,
   ofSameType: (c: number) => boolean,
-  cells: any,
-  vertices: any,
+  cells: PackedGraph["cells"],
+  vertices: PackedGraph["vertices"],
   n: number
 ): number | undefined {
   if (cells.b[cellId]) {
@@ -398,7 +409,7 @@ function drawLegend(thresholds: number[], distUnit: string): void {
 }
 
 function drawToggleButton(
-  g: any,
+  g: Selection<SVGGElement, unknown, null, undefined>,
   x: number,
   y: number,
   w: number,

@@ -1,4 +1,4 @@
-type Snapshot = any;
+type Snapshot = unknown;
 
 interface HistoryStack {
   undo: Snapshot[];
@@ -15,7 +15,7 @@ class UndoRedoModule {
     }
   }
 
-  push(key: string, snapshot: Snapshot): void {
+  push<T>(key: string, snapshot: T): void {
     const stack = this.stacks.get(key);
     if (!stack) return;
     stack.undo.push(this.clone(snapshot));
@@ -23,18 +23,18 @@ class UndoRedoModule {
     stack.redo = [];
   }
 
-  undo(key: string, currentSnapshot: Snapshot): Snapshot | null {
+  undo<T>(key: string, currentSnapshot: T): T | null {
     const stack = this.stacks.get(key);
     if (!stack || stack.undo.length === 0) return null;
-    const previous = stack.undo.pop()!;
+    const previous = stack.undo.pop() as T;
     stack.redo.push(this.clone(currentSnapshot));
     return previous;
   }
 
-  redo(key: string, currentSnapshot: Snapshot): Snapshot | null {
+  redo<T>(key: string, currentSnapshot: T): T | null {
     const stack = this.stacks.get(key);
     if (!stack || stack.redo.length === 0) return null;
-    const next = stack.redo.pop()!;
+    const next = stack.redo.pop() as T;
     stack.undo.push(this.clone(currentSnapshot));
     return next;
   }
@@ -59,7 +59,7 @@ class UndoRedoModule {
     this.stacks.clear();
   }
 
-  private clone(obj: any): any {
+  private clone(obj: unknown): unknown {
     if (obj === null || typeof obj !== "object") return obj;
     if (obj instanceof Uint8Array) return Uint8Array.from(obj);
     if (obj instanceof Uint16Array) return Uint16Array.from(obj);
@@ -69,10 +69,8 @@ class UndoRedoModule {
     if (obj instanceof Float32Array) return Float32Array.from(obj);
     if (obj instanceof Float64Array) return Float64Array.from(obj);
     if (Array.isArray(obj)) return obj.map(item => this.clone(item));
-    const cloned: Record<string, any> = {};
-    for (const key of Object.keys(obj)) {
-      cloned[key] = this.clone(obj[key]);
-    }
+    const cloned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) cloned[key] = this.clone(value);
     return cloned;
   }
 }

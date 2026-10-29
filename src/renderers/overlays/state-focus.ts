@@ -1,6 +1,6 @@
 // State focus: the pinned (fogged) states keep their color while the rest of the states layer is
 // desaturated and dimmed by styles.states.options (fork-only feature)
-import { ensureEl } from "@/utils";
+import { ensureEl } from "@/utils/node-utils";
 
 /** ids of the states pinned through the fog mask */
 function getFocusedStates(): number[] {

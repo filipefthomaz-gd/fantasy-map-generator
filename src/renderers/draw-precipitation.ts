@@ -1,5 +1,8 @@
-import { color, easeSinIn, interpolateBlues, select, transition } from "d3";
-import { ensureEl, si } from "../utils";
+import { color, easeSinIn, interpolateBlues, type Selection, select, transition } from "d3";
+import { Precipitation } from "@/model/physical/precipitation-generator";
+import { log } from "@/utils/logger";
+import { ensureEl } from "@/utils/node-utils";
+import { si } from "@/utils/number-utils";
 
 const LEVELS = 8;
 const SWATCH_SIZE = 10;
@@ -15,7 +18,7 @@ let precipitationMode: PrecipitationMode = "cells";
 const prec = () => select(ensureEl<SVGGElement>("prec"));
 
 export function drawPrecipitation(): void {
-  TIME && console.time("drawPrecipitation");
+  log.time("drawPrecipitation");
 
   prec().selectAll("*").remove();
 
@@ -33,7 +36,7 @@ export function drawPrecipitation(): void {
 
   drawLegend();
 
-  TIME && console.timeEnd("drawPrecipitation");
+  log.timeEnd("drawPrecipitation");
 }
 
 /** arrows showing where the prevailing winds enter the map */
@@ -284,7 +287,7 @@ function drawLegend(): void {
 }
 
 function drawToggleButton(
-  g: any,
+  g: Selection<SVGGElement, unknown, null, undefined>,
   x: number,
   y: number,
   w: number,

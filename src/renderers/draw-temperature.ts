@@ -10,12 +10,15 @@ import {
   scaleSequential,
   select
 } from "d3";
-import { Seasons } from "@/components/seasons";
-import { viewport } from "@/components/viewport";
-import { connectVertices, convertTemperature, round } from "../utils";
+import { convertTemperature } from "@/model/units";
+import { Seasons } from "@/renderers/seasons";
+import { viewport } from "@/renderers/viewport/viewport";
+import { log } from "@/utils/logger";
+import { connectVertices } from "@/utils/path-utils";
+import { round } from "@/utils/string-utils";
 
 const temperatureRenderer = (): void => {
-  TIME && console.time("drawTemperature");
+  log.time("drawTemperature");
 
   select("#temperature").selectAll("*").remove();
   const lineGen = line<[number, number]>().curve(curveBasisClosed);
@@ -133,7 +136,7 @@ const temperatureRenderer = (): void => {
     labels.push([x, y, t]);
   }
 
-  TIME && console.timeEnd("drawTemperature");
+  log.timeEnd("drawTemperature");
 };
 
 export { temperatureRenderer as drawTemperature };
