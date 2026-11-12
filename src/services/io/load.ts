@@ -25,8 +25,8 @@ import { TradeAnimation } from "@/renderers/trade-animation";
 import { undraw } from "@/renderers/undraw";
 import { Services } from "@/services";
 import { declareFont, fonts } from "@/services/fonts";
+import { BrowserSaves } from "@/services/io/browser-saves";
 import { MapRepair } from "@/services/io/map-repair";
-import { LocalDB } from "@/services/local-db";
 import { focusOn, generateMapOnLoad } from "@/services/url-params";
 import { clearCache, compareVersions, isValidVersion, parseMapVersion, VERSION } from "@/services/versioning";
 import { App } from "@/ui/app-commands";
@@ -42,13 +42,17 @@ import { ensureEl } from "@/utils/node-utils";
 import { rn } from "@/utils/number-utils";
 import { safeParseJSON } from "@/utils/string-utils";
 
+/** Load the most recent browser save, quick or auto */
 async function quickLoad(): Promise<void> {
-  const blob = await LocalDB.get("lastMap");
+  const latest = await BrowserSaves.latest();
+  if (latest) return loadFromBrowser(latest.id);
+  tip(t("No map stored. Save map to browser storage first"), true, "error", 2000);
+  log.error("No map stored");
+}
+
+async function loadFromBrowser(id: string): Promise<void> {
+  const blob = await BrowserSaves.read(id);
   if (blob) loadMapPrompt(blob);
-  else {
-    tip(t("No map stored. Save map to browser storage first"), true, "error", 2000);
-    log.error("No map stored");
-  }
 }
 
 async function loadFromDropbox(): Promise<void> {
@@ -274,7 +278,8 @@ type ForkData = { resource?: string; continents?: string; resourceSecondary?: st
 
 /**
  * Pull the fork-only lines (per-cell resources and continents) out of the save data. They follow
- * upstream's last line: 54-57 since v1.156 added legends at 53, 53-56 before. Maps saved by the fork
+ * upstream's last line: 56-59 since v1.157 added prosperity and development at 54-55, 54-57 since v1.156
+ * added legends at 53, 53-56 before. Maps saved by the fork
  * before the v1.152 upstream merge kept them at 41-44 and shifted goods to 45-50; they are told apart
  * by the empty mapTimeline slot at 40, where the upstream layout stores cells.good. Such data is
  * rewritten in place to the upstream layout, so everything downstream (including auto-update) reads
@@ -294,9 +299,10 @@ function normalizeForkLayout(data: string[], mapVersion: string | null): ForkDat
     return forkData;
   }
 
-  const start = mapVersion && compareVersions(mapVersion, "1.156.0").isOlder ? 53 : 54;
+  const isOlder = (version: string) => !!mapVersion && compareVersions(mapVersion, version).isOlder;
+  const start = isOlder("1.156.0") ? 53 : isOlder("1.157.0") ? 54 : 56;
   const [resource, continents, resourceSecondary, resourceRichness] = data.slice(start, start + 4);
-  data.length = Math.min(data.length, start); // a pre-1.156 fork map has no legends line
+  data.length = Math.min(data.length, start); // older fork maps lack the later upstream lines; auto-update adds them
   return { resource, continents, resourceSecondary, resourceRichness };
 }
 
@@ -304,11 +310,12 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
   let isLogGroupOpen = false;
 
   try {
-    const { migrateLegacySettings, resolveVersionConflicts } = await import("./auto-update"); // TODO: don't load if not required
+    const isOutdated = compareVersions(mapVersion, VERSION).isOlder;
+    const autoUpdate = isOutdated ? await import("./auto-update") : null; // every migration is gated on an older version
 
-    Dialog.closeAll();
+    Dialog.closeAll(undefined, { minimized: true });
 
-    migrateLegacySettings(mapVersion!, data);
+    autoUpdate?.migrateLegacySettings(mapVersion!, data);
     const settings = data[1] ? safeParseJSON(data[1]) : null;
     if (!settings) throw new Error("Map settings are missing or malformed");
     Options.applyLoaded(settings);
@@ -376,13 +383,13 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     pack.zones = data[38] ? JSON.parse(data[38]) : [];
     pack.cells.biome = Uint8Array.from(data[16].split(","), Number);
     pack.cells.burg = Uint16Array.from(data[17].split(","), Number);
-    pack.cells.conf = Uint8Array.from(data[18].split(","), Number);
+    pack.cells.conf = Uint16Array.from(data[18].split(","), Number);
     pack.cells.culture = Uint16Array.from(data[19].split(","), Number);
     pack.cells.fl = Uint16Array.from(data[20].split(","), Number);
     pack.cells.pop = Float32Array.from(data[21].split(","), Number);
     pack.cells.r = Uint16Array.from(data[22].split(","), Number);
     // data[23] had deprecated cells.road
-    pack.cells.s = Uint16Array.from(data[24].split(","), Number);
+    pack.cells.s = Int16Array.from(data[24].split(","), Number); // old files hold wrapped negatives, which wrap back
     pack.cells.state = Uint16Array.from(data[25].split(","), Number);
     pack.cells.religion = data[26]
       ? Uint16Array.from(data[26].split(","), Number)
@@ -396,10 +403,12 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     pack.ice = data[39] ? JSON.parse(data[39]) : [];
     const forkData = normalizeForkLayout(data, mapVersion);
     pack.cells.good = data[40] ? Uint16Array.from(data[40].split(","), Number) : new Uint16Array(pack.cells.i.length);
-    pack.goods = data[41] ? JSON.parse(data[41]) : [];
+    if (data[41]) options.map.goods = JSON.parse(data[41]); // older maps keep goods outside the settings
     pack.markets = data[42] ? JSON.parse(data[42]) : [];
     pack.deals = data[43] ? JSON.parse(data[43]) : [];
     pack.cells.market = data[44] ? Uint16Array.from(data[44].split(","), Number) : new Uint16Array(pack.cells.i.length);
+    if (data[54]) pack.cells.prosperity = Uint8Array.from(data[54].split(","), Number); // auto-update adds it to older maps
+    if (data[55]) pack.cells.development = Uint8Array.from(data[55].split(","), Number); // auto-update adds it to older maps
     pack.measurers = data[46] ? JSON.parse(data[46]) : [];
     pack.addedLabels = data[47] ? JSON.parse(data[47]) : [];
     pack.relief = data[49] ? JSON.parse(data[49]) : [];
@@ -443,12 +452,9 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     });
     if (data[45]) goodIconsDefs?.insertAdjacentHTML("beforeend", data[45]);
 
-    await resolveVersionConflicts(mapVersion!, data);
+    await autoUpdate?.resolveVersionConflicts(mapVersion!, data);
 
-    // hidden layers save no paths, so colored hatchings are restored from data
-    const { biomes, cultures, states, religions, provinces, zones, markets } = pack;
-    const entities = [biomes, cultures, states, religions, provinces, zones, markets].flat();
-    Hatches.ensureAll(entities.map(entity => entity?.color));
+    Hatches.sync();
 
     const styleRecord = data[48] ? safeParseJSON(data[48]) : undefined; // data[48] should be already migrated by auto-update
     Styles.set(Styles.parse(styleRecord));
@@ -458,6 +464,8 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
 
     if (data[50]) Layers.restore(JSON.parse(data[50]));
     if (data[51]) GraphOverride.restore(JSON.parse(data[51]));
+
+    const repairs = MapRepair.repair();
 
     Goods.sync();
     Markets.sync();
@@ -472,8 +480,6 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
     ]) {
       HeightmapColorSchemes.ensure(scheme);
     }
-
-    const repairs = MapRepair.repair();
 
     Layers.drawAll();
     Styles.writeAll();
@@ -537,6 +543,7 @@ async function parseLoadedData(data: string[], mapVersion: string | null): Promi
 
 export const Load = {
   quickLoad,
+  loadFromBrowser,
   loadFromDropbox,
   createSharableDropboxLink,
   loadMapFromURL,

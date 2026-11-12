@@ -4,9 +4,9 @@
 import { select } from "d3";
 import { Controllers } from "@/controllers";
 import { Routes } from "@/model/economy/routes-generator";
-import { type Transport, type TransportDomain, Transports } from "@/model/economy/transports-generator";
 import type { Burg } from "@/model/political/burgs-generator";
 import { Journeys } from "@/model/story/journeys/journeys-generator";
+import { type Transport, type TransportDomain, Transports } from "@/model/story/journeys/transports-generator";
 import { convertSpeed, getDistanceUnit } from "@/model/units";
 import { Layers } from "@/renderers/layers";
 import type { JourneyPoint } from "@/types/journey";

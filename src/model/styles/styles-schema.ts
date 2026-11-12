@@ -7,6 +7,7 @@ import { GRID_TYPES } from "@/data/grid-types";
 import { OCEAN_OUTLINES, OCEAN_PATTERNS } from "@/data/ocean-patterns";
 import {
   CLIPS,
+  CONTOUR_INTERVALS,
   CONTOUR_MODES,
   FONT_STYLES,
   FONT_WEIGHTS,
@@ -20,7 +21,9 @@ import {
   RELIEF_SET_LABELS,
   RELIEF_SETS,
   TEXT_DECORATIONS,
-  WAVE_TYPES
+  WAVE_TYPES,
+  ZOOM_SIZES,
+  type ZoomSize
 } from "@/data/style-choices";
 import type { StyleMeta } from "@/types/styles";
 import { sentences, t } from "@/utils/i18n";
@@ -195,9 +198,12 @@ const contours = meta(
     mode: choice(CONTOUR_MODES, {
       tip: t("Draw smooth elevation contours over the heightmap colors, or show only contour lines")
     }),
-    interval: count(1, 20, {
+    interval: meta(z.literal(CONTOUR_INTERVALS), {
       label: t("Spacing"),
-      tip: t("Elevation spacing between contours. Lower values show more detail; every fifth contour is heavier")
+      tip: sentences(
+        t("Height between contours in the map's height unit"),
+        t("Every fifth contour is heavier and carries the labels")
+      )
     }),
     color: solidColor({ label: t("Color"), tip: t("Color of the contour lines") }),
     width: range(0.1, 2, {
@@ -205,10 +211,15 @@ const contours = meta(
       step: 0.05,
       tip: t("Width of minor contours. Every fifth contour is twice as wide")
     }),
-    opacity: range(0, 1, { label: t("Opacity"), step: 0.05, tip: t("Opacity of the contour lines") })
+    opacity: range(0, 1, { label: t("Opacity"), step: 0.05, tip: t("Opacity of the contour lines") }),
+    fontSize: range(0, 20, {
+      label: t("Font size"),
+      step: 0.1,
+      tip: sentences(t("Font size of the elevation labels on every fifth contour"), t("Set to 0 to hide the labels"))
+    }).default(0)
   }),
   { gate: "mode", label: t("Contours") }
-).default({ mode: "off", interval: 5, color: "#5c513e", width: 0.35, opacity: 0.5 });
+).default({ mode: "off", interval: 200, color: "#5c513e", width: 0.35, opacity: 0.5, fontSize: 0 });
 
 // downhill pen strokes, denser and longer on steeper slopes
 const hachures = meta(
@@ -345,6 +356,18 @@ const oceanWaves = meta(
   options: { render: false, type: "waves", density: 1, length: 1, reach: 4, halo: 0.25 }
 });
 
+// the options of a layer whose font size follows the zoom (renderers/viewport/viewport.ts)
+const zoomOptions = (zoomSize: ZoomSize) =>
+  z
+    .strictObject({
+      zoomSize: choice(ZOOM_SIZES, {
+        label: t("Zoom size"),
+        tip: t("Set how the size changes on zoom, from growing with the map to keeping the same pixel size"),
+        effect: "zoom"
+      }).default(zoomSize)
+    })
+    .default({ zoomSize });
+
 const burgGroup = z.strictObject({
   attrs: z.strictObject({
     opacity,
@@ -397,8 +420,6 @@ const padding = (side: string) =>
     tip: t("Background element padding in pixels")
   });
 
-// --- the record -------------------------------------------------------------------------------------
-// on change run scripts/convert-style-presets.mjs to automatically update style presets
 export const stylesSchema = z.strictObject({
   biomes: z.strictObject({ attrs: z.strictObject({ opacity, filter }) }),
   borders: z.strictObject({
@@ -411,6 +432,7 @@ export const stylesSchema = z.strictObject({
     })
   }),
   burgIcons: z.strictObject({
+    options: zoomOptions("natural"),
     groups: z
       .record(
         z.string(),
@@ -533,21 +555,33 @@ export const stylesSchema = z.strictObject({
   fogging: z.strictObject({ attrs: z.strictObject({ opacity, fill, mask, filter }) }),
   goods: z.strictObject({
     groups: z.strictObject({
-      goodsCells: meta(z.strictObject({ attrs: z.strictObject({ opacity, filter }) }), { label: t("Goods cells") }),
+      goodsCells: meta(
+        z.strictObject({
+          attrs: z.strictObject({ opacity, filter }),
+          options: z
+            .strictObject({
+              render: flag({ label: t("Cells"), tip: t("Color the cells by what they produce") }).default(true)
+            })
+            .default({ render: true })
+        }),
+        { gate: "options.render", label: t("Cells") }
+      ),
       goodsIcons: meta(
         z.strictObject({
           attrs: z.strictObject({
             opacity,
-            stroke: variant(stroke, { label: t("Icon Lines"), tip: t("Color of the icon lines") }),
+            stroke: variant(stroke, { group: t("Stroke"), label: t("Color"), tip: t("Color of the icon lines") }),
             "stroke-width": variant(strokeWidth, {
-              label: t("Stroke width"),
+              group: t("Stroke"),
+              label: t("Width"),
               tip: t("Width of the circle outline; the icon lines are drawn at 40% of it")
             }),
             filter
           }),
           options: z.strictObject({
+            render: flag({ label: t("Icons"), tip: t("Mark the deposit cells") }).default(true),
             size: number({
-              label: t("Marker size"),
+              label: t("Size"),
               range: [1, 20],
               step: 0.5,
               tip: t("Set good marker (icon and circle) size in pixels")
@@ -555,7 +589,7 @@ export const stylesSchema = z.strictObject({
             circle: flag({ label: t("Show circle") })
           })
         }),
-        { label: t("Goods icons") }
+        { gate: "options.render", label: t("Icons") }
       ),
       goodsBurgs: meta(
         z.strictObject({
@@ -566,15 +600,35 @@ export const stylesSchema = z.strictObject({
             filter
           }),
           options: z.strictObject({
+            render: flag({ label: t("Burgs"), tip: t("Show burgs' output as pies of their goods") }).default(true),
             size: number({
-              label: t("Plate size"),
+              label: t("Size"),
               range: [1, 12],
               step: 0.5,
-              tip: t("Set burg production plate icon size in pixels. Plate and font scale together with it")
+              tip: t("Size of the burg production circles: the largest has 1.5 times this radius")
             })
           })
         }),
-        { label: t("Goods burgs") }
+        { gate: "options.render", label: t("Burgs") }
+      ),
+      goodsTraffic: meta(
+        z.strictObject({
+          attrs: z.strictObject({
+            opacity,
+            stroke: variant(stroke, {
+              group: t("Stroke"),
+              tip: t("Color of the routes while more than one good is shown")
+            }),
+            "stroke-linecap": variant(strokeLinecap, { group: t("Stroke") }),
+            "stroke-linejoin": variant(strokeLinejoin, { group: t("Stroke") }),
+            filter
+          }),
+          options: z.strictObject({
+            render: flag({ label: t("Traffic"), tip: t("Show how many goods each route carried in the last run") }),
+            size: number({ label: t("Width"), range: [0.5, 10], step: 0.5, tip: t("Width of the busiest routes") })
+          })
+        }),
+        { gate: "options.render", label: t("Traffic") }
       )
     })
   }),
@@ -613,6 +667,7 @@ export const stylesSchema = z.strictObject({
       .default({ arrows: false })
   }),
   labels: z.strictObject({
+    options: zoomOptions("arithmetic"),
     groups: z.record(
       z.string(),
       z.strictObject({
@@ -706,7 +761,7 @@ export const stylesSchema = z.strictObject({
       }).nullable()
     })
   }),
-  markers: z.strictObject({ attrs: z.strictObject({ opacity, filter }) }),
+  markers: z.strictObject({ attrs: z.strictObject({ opacity, filter }), options: zoomOptions("geometric") }),
   markets: z.strictObject({
     attrs: z.strictObject({
       "fill-opacity": fillGroup["fill-opacity"],
@@ -714,6 +769,7 @@ export const stylesSchema = z.strictObject({
       "stroke-width": variant(strokeWidth, { group: t("Stroke") }),
       "stroke-dasharray": variant(strokeDasharray, { group: t("Stroke") }),
       "stroke-linecap": variant(strokeLinecap, { group: t("Stroke") }),
+      "stroke-linejoin": variant(strokeLinejoin, { group: t("Stroke") }),
       filter
     }),
     options: z.strictObject({
@@ -721,7 +777,7 @@ export const stylesSchema = z.strictObject({
         label: t("Marker size"),
         range: [1, 12],
         step: 0.5,
-        tip: t("Set market marker (circle) size in pixels")
+        tip: t("Set market marker size in pixels")
       }),
       iconSize: number({
         label: t("Icon size"),
@@ -848,7 +904,12 @@ export const stylesSchema = z.strictObject({
     })
   }),
   religions: z.strictObject({ attrs: z.strictObject({ opacity, ...strokeGroup, filter }) }),
-  rivers: z.strictObject({ attrs: z.strictObject({ opacity, fill, filter }) }),
+  rivers: z.strictObject({
+    groups: z.record(
+      z.string(),
+      z.strictObject({ attrs: z.strictObject({ opacity, ...fillGroup, ...strokeGroup, filter }) })
+    )
+  }), // stock groups plus user-created ones
   routes: z.strictObject({
     groups: z.record(
       z.string(),

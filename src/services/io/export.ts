@@ -10,11 +10,12 @@ import { drawScaleBar } from "@/renderers/draw-scalebar";
 import { HeightmapColorSchemes } from "@/renderers/heightmap/heightmap-color-schemes";
 import { Layers } from "@/renderers/layers";
 import { restoreOceanVectors } from "@/renderers/ocean-cache";
-import { viewport, ZOOM_CURVES, type ZoomedLayer, zoomFontSize } from "@/renderers/viewport/viewport";
+import { viewport, ZOOMED_LAYERS, zoomFontSize } from "@/renderers/viewport/viewport";
 import { ViewportLayers } from "@/renderers/viewport/viewport-renderer";
 import { getUsedFonts, loadFontsAsDataURI } from "@/services/fonts";
 import { getFileName } from "@/services/io/file-name";
 import { savedMessage } from "@/services/platform";
+import { restoreFeatureMaskBounds } from "@/ui/map/zoom";
 import { tip } from "@/ui/tooltips";
 import { unique } from "@/utils/array-utils";
 import { getCoordinates } from "@/utils/common-utils";
@@ -391,6 +392,7 @@ async function getMapURL(type: string, config: GetMapURLOptions = {}): Promise<s
   } = config;
   const cloneEl = ensureEl("map").cloneNode(true) as SVGSVGElement;
   restoreOceanVectors(cloneEl);
+  restoreFeatureMaskBounds(cloneEl);
   cloneEl.id = "fantasyMap";
   document.body.appendChild(cloneEl);
   const clone: MapSelection = select(cloneEl);
@@ -405,9 +407,10 @@ async function getMapURL(type: string, config: GetMapURLOptions = {}): Promise<s
       clone.attr("width", options.map.graph.width).attr("height", options.map.graph.height);
       clone.select("#viewbox").attr("transform", null);
       // the zoomed layers at their scale 1 font size
-      for (const layer of Object.keys(ZOOM_CURVES) as ZoomedLayer[]) {
+      for (const layer of ZOOMED_LAYERS) {
         clone.select(`#${layer}`).attr("font-size", `${zoomFontSize(layer, 1)}px`);
       }
+      clone.select("#ruler").style("--px", "1px");
 
       if (!noScaleBar) drawScaleBar(cloneEl, 1, options.map.graph.width, options.map.graph.height);
     }
@@ -420,9 +423,10 @@ async function getMapURL(type: string, config: GetMapURLOptions = {}): Promise<s
       const y = (height - (y1 - y0) * scale) / 2 - y0 * scale;
       clone.attr("width", width).attr("height", height);
       clone.select("#viewbox").attr("transform", `translate(${x} ${y}) scale(${scale})`);
-      for (const layer of Object.keys(ZOOM_CURVES) as ZoomedLayer[]) {
+      for (const layer of ZOOMED_LAYERS) {
         clone.select(`#${layer}`).attr("font-size", `${zoomFontSize(layer, scale)}px`);
       }
+      clone.select("#ruler").style("--px", `${1 / scale}px`);
       bounds = { scale, x0: -x / scale, y0: -y / scale, x1: (width - x) / scale, y1: (height - y) / scale };
     }
 
@@ -528,6 +532,14 @@ async function getMapURL(type: string, config: GetMapURLOptions = {}): Promise<s
     if (cloneEl.getElementById("compass")) {
       const rose = svgDefs.getElementById("defs-compass-rose");
       if (rose) cloneDefs.appendChild(rose.cloneNode(true));
+    }
+
+    // add journey markers
+    if (cloneEl.getElementById("journeys")?.hasChildNodes()) {
+      for (const id of ["journey-start", "journey-arrow"]) {
+        const marker = svgDefs.getElementById(id);
+        if (marker) cloneDefs.appendChild(marker.cloneNode(true));
+      }
     }
 
     // add grid pattern
@@ -846,14 +858,14 @@ function saveGeoJsonRoutes(): void {
 
 function saveGeoJsonRivers(): void {
   const features = pack.rivers.map(
-    ({ i, cells, points, source, mouth, parent, basin, widthFactor, sourceWidth, discharge, name, type }) => {
+    ({ i, cells, points, source, mouth, parent, basin, widthFactor, sourceWidth, discharge, name, type, group }) => {
       if (!cells || cells.length < 2) return null;
       const meanderedPoints = Rivers.addMeandering(cells, points);
       const coordinates = meanderedPoints.map(([x, y]) => toGeoCoordinates(x, y));
       return {
         type: "Feature",
         geometry: { type: "LineString", coordinates },
-        properties: { id: i, source, mouth, parent, basin, widthFactor, sourceWidth, discharge, name, type }
+        properties: { id: i, source, mouth, parent, basin, widthFactor, sourceWidth, discharge, name, type, group }
       };
     }
   );

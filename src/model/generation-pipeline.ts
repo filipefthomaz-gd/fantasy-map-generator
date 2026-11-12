@@ -7,6 +7,7 @@ import { Goods } from "@/model/economy/goods-generator";
 import { Markets } from "@/model/economy/markets-generator";
 import { Production } from "@/model/economy/production-generator";
 import { Routes } from "@/model/economy/routes-generator";
+import { Taxes } from "@/model/economy/taxes";
 import { GraphOverride } from "@/model/graph/graph-override";
 import { Grid } from "@/model/graph/grid-generator";
 import { Pack } from "@/model/graph/pack-generator";
@@ -26,6 +27,7 @@ import { Provinces } from "@/model/political/provinces-generator";
 import { States } from "@/model/political/states-generator";
 import { Zones } from "@/model/political/zones-generator";
 import { Cultures } from "@/model/society/cultures-generator";
+import { Development } from "@/model/society/development-generator";
 import { Population } from "@/model/society/population-generator";
 import { Religions } from "@/model/society/religions-generator";
 import { Journeys } from "@/model/story/journeys/journeys-generator";
@@ -58,6 +60,7 @@ const generationPipelineSteps = [
   { id: "burgs", run: () => Burgs.generate() },
   { id: "states", run: () => States.generate() },
   { id: "routes", run: () => Routes.generate() },
+  { id: "development", run: () => Development.generate() },
   { id: "religions", run: () => Religions.generate() },
   { id: "burgsSpecify", run: () => Burgs.specify() },
   { id: "stateStatistics", run: () => States.collectStatistics() },
@@ -68,7 +71,7 @@ const generationPipelineSteps = [
   { id: "featureNames", run: () => Features.defineNames() },
   { id: "markets", run: () => Markets.generate() },
   { id: "production", run: () => Production.produce() },
-  { id: "taxes", run: () => States.collectTaxes() },
+  { id: "taxes", run: () => Taxes.collect() },
   { id: "military", run: () => Military.generate() },
   { id: "markers", run: () => Markers.generate() },
   { id: "zones", run: () => Zones.generate() },
@@ -108,6 +111,7 @@ const erasePipelineSteps = [
   { id: "burgs", run: () => Burgs.generate() },
   { id: "states", run: () => States.generate() },
   { id: "routes", run: () => Routes.generate() },
+  { id: "development", run: () => Development.generate() },
   { id: "religions", run: () => Religions.generate() },
   { id: "burgsSpecify", run: () => Burgs.specify() },
   { id: "stateStatistics", run: () => States.collectStatistics() },
@@ -118,7 +122,7 @@ const erasePipelineSteps = [
   { id: "featureNames", run: () => Features.defineNames() },
   { id: "markets", run: () => Markets.generate() },
   { id: "production", run: () => Production.produce() },
-  { id: "taxes", run: () => States.collectTaxes() },
+  { id: "taxes", run: () => Taxes.collect() },
   { id: "military", run: () => Military.generate() },
   { id: "markers", run: () => Markers.generate() },
   { id: "zones", run: () => Zones.generate() },

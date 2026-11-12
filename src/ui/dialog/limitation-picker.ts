@@ -16,9 +16,7 @@ export interface LimitationItem {
 }
 
 const DIALOG_ID = "limitationPicker";
-
-/** the entities a limitation can name: id 0 (marine, neutrals, no religion) and removed ones never */
-const choices = (items: readonly LimitationItem[]) => items.filter(item => item.i && !item.removed);
+const ROWS_PER_COLUMN = 20;
 
 /** "all" for no limitation, else the allowed names */
 export function limitationTip(allowed: readonly number[] | undefined, items: readonly LimitationItem[]): string {
@@ -31,49 +29,68 @@ export function pickLimitation({
   heading,
   items,
   allowed,
-  onApply
+  onApply,
+  exact = false,
+  badge
 }: {
   title: string;
   heading: string;
   items: readonly LimitationItem[];
   allowed: readonly number[] | undefined;
   onApply: (allowed: number[]) => void; // empty when every entity is checked
+  exact?: boolean; // a selection, not a limitation: exactly the allowed are checked, and none is a valid choice
+  badge?: (item: LimitationItem) => string; // markup drawn before the name instead of the color dot
 }): void {
-  const rows = choices(items).map(
-    ({ i, name, fullName, color }) => /* html */ `<tr data-tip="${escapeHtml(name)}">
-      <td><span style="color:${escapeHtml(color ?? "")}">⬤</span></td>
-      <td>
-        <input data-i="${i}" id="limitation${i}" type="checkbox" class="checkbox" ${!allowed?.length || allowed.includes(i) ? "checked" : ""}>
-        <label for="limitation${i}" class="checkbox-label">${escapeHtml(fullName || name)}</label>
-      </td>
-    </tr>`
+  const entries = items
+    .filter(item => item.i && !item.removed)
+    .sort((a, b) => (a.fullName || a.name).localeCompare(b.fullName || b.name));
+
+  const rows = entries.map(
+    item => /* html */ `<div style="break-inside: avoid; display: flex; align-items: center; gap: .2em">
+      ${badge ? badge(item) : `<span style="color:${escapeHtml(item.color ?? "")}">⬤</span>`}
+      <input data-i="${item.i}" id="limitation${item.i}" type="checkbox" class="checkbox" ${allowed?.includes(item.i) || (!exact && !allowed?.length) ? "checked" : ""}>
+      <label for="limitation${item.i}" class="checkbox-label">${escapeHtml(item.fullName || item.name)}</label>
+    </div>`
   );
+  const columns = Math.min(4, Math.ceil(entries.length / ROWS_PER_COLUMN));
   Dialog.destroy(DIALOG_ID);
   ensureEl("dialogs").insertAdjacentHTML(
     "beforeend",
     /* html */ `<div id="${DIALOG_ID}" class="dialog"><b>${escapeHtml(heading)}:</b>
-      <table style="margin-top:.3em"><tbody>${rows.join("")}</tbody></table>
+      <div style="margin-top: .3em">
+        <input id="limitationAll" type="checkbox" class="checkbox">
+        <label for="limitationAll" class="checkbox-label">${t("All")}</label>
+      </div>
+      <div class="limitationList" style="margin-top: .3em; columns: ${columns}; column-gap: 1.5em">${rows.join("")}</div>
     </div>`
   );
-  const inputs = () => Array.from(ensureEl(DIALOG_ID).querySelectorAll<HTMLInputElement>("input"));
+  const all = ensureEl<HTMLInputElement>("limitationAll");
+  const inputs = () => Array.from(ensureEl(DIALOG_ID).querySelectorAll<HTMLInputElement>(".limitationList input"));
+  const syncAll = () => {
+    const checked = inputs().filter(input => input.checked).length;
+    all.checked = checked === inputs().length;
+    all.indeterminate = checked > 0 && checked < inputs().length;
+  };
+  syncAll();
+  all.addEventListener("change", () => {
+    for (const input of inputs()) input.checked = all.checked;
+  });
+  for (const input of inputs()) input.addEventListener("change", syncAll);
 
   Dialog.open(DIALOG_ID, {
     width: "fit-content",
+    maxHeight: Math.max(window.innerHeight - 40, 300),
     title,
     position: { my: "center", at: "center", of: "svg" },
     buttons: [
       {
-        label: t("Invert"),
-        onClick: () => {
-          for (const input of inputs()) input.checked = !input.checked;
-        }
-      },
-      {
         label: t("Apply"),
         onClick: () => {
           const checked = inputs().filter(input => input.checked);
-          if (!checked.length) return tip(t("Select at least one element"), false, "error");
-          onApply(checked.length === inputs().length ? [] : checked.map(input => Number(input.dataset.i)));
+          const ids = checked.map(input => Number(input.dataset.i));
+          if (exact) onApply(ids);
+          else if (!checked.length) return tip(t("Select at least one element"), false, "error");
+          else onApply(checked.length === inputs().length ? [] : ids);
           Dialog.close(DIALOG_ID);
         }
       },

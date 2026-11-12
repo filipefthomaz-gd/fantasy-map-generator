@@ -44,6 +44,7 @@ const columns: EditorColumn<ContinentStats>[] = [
 ];
 
 const continentsTable = initEditorTable<ContinentStats>({
+  dialogId,
   getData: () =>
     sortDataByColumns(
       dialogId,

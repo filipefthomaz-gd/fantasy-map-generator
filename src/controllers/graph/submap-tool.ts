@@ -157,8 +157,7 @@ function resample({ x0, y0, scale, points, rescaleBurgs }: ResampleParams): void
   if (rescaleBurgs) rescaleBurgStyles(scale);
   Layers.drawAll();
 
-  registerMap(); // a submap is a new map: it gets its own id and history entry
-
+  registerMap();
   log.groupEnd();
 }
 

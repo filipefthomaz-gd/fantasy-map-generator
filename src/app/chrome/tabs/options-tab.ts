@@ -38,6 +38,7 @@ import { constrainZoom, setMapZoom, setTranslateExtent, setZoomExtent } from "@/
 import { bindPinIcons } from "@/ui/pin-icons";
 import { tip } from "@/ui/tooltips";
 import { Catalog, sentences, t } from "@/utils/i18n";
+import { DEBUG_MODES, log } from "@/utils/logger";
 import { applyOption, ensureEl, findEl } from "@/utils/node-utils";
 import { minmax, rn } from "@/utils/number-utils";
 
@@ -54,6 +55,7 @@ interface OptionDefinition<T extends string | number> {
   parse: (value: string) => T;
   pin?: string;
   effect?: (value: T) => void;
+  event?: "change";
 }
 
 const OPTION_BINDINGS: Record<string, OptionBinding> = {
@@ -157,7 +159,8 @@ const OPTION_BINDINGS: Record<string, OptionBinding> = {
     read: o => o.app.ui.size,
     write: (o, value) => (o.app.ui.size = value),
     parse: Number,
-    effect: changeUiSize
+    effect: changeUiSize,
+    event: "change" // resizing the panel under the dragged thumb makes the value jump
   }),
   tooltipSize: option({
     read: o => o.app.ui.tooltipSize,
@@ -203,10 +206,11 @@ const OPTION_BINDINGS: Record<string, OptionBinding> = {
 };
 
 function option<T extends string | number>(definition: OptionDefinition<T>): OptionBinding {
-  const { read, write, parse, pin, effect } = definition;
+  const { read, write, parse, pin, effect, event } = definition;
   return {
     read,
     pin,
+    event,
     update(raw) {
       const value = parse(raw);
       Options.set(o => write(o, value));
@@ -408,7 +412,7 @@ const TEMPLATE = /* html */ `
       <td>
         <select id="performancePreset" data-option="performancePreset">
           <option value="quality">${t("Quality")}</option>
-          <option value="balance" selected>${t("Balance")}</option>
+          <option value="balance" selected>${t("Balance", { context: "preset" })}</option>
           <option value="speed">${t("Speed")}</option>
           <option value="custom" disabled hidden>${t("Custom")}</option>
         </select>
@@ -547,6 +551,23 @@ function addListeners(): void {
   };
   ensureEl("optionsContent").addEventListener("click", onClick);
   ensureEl(ADVANCED_OPTIONS_ID).addEventListener("click", onClick);
+  ensureEl(ADVANCED_OPTIONS_ID).addEventListener("change", onDebugChange);
+}
+
+/** The diagnostics checked in the Advanced options, kept for this browser */
+function onDebugChange(event: Event): void {
+  if (!(event.target as HTMLElement).dataset.debug) return;
+  const modes = DEBUG_MODES.filter(mode => findEl<HTMLInputElement>(`debug_${mode}`)?.checked);
+  Options.set(o => (o.app.debug = modes));
+  Options.persist();
+  log.setDebug(modes);
+}
+
+function syncDebugModes(): void {
+  for (const mode of DEBUG_MODES) {
+    const input = findEl<HTMLInputElement>(`debug_${mode}`);
+    if (input) input.checked = options.app.debug.includes(mode);
+  }
 }
 
 function optionInputs<T extends HTMLElement = HTMLInputElement>(key: string): NodeListOf<T> {
@@ -580,6 +601,7 @@ export function syncOptionInputs(): void {
   syncCultures();
   syncPngResolution();
   syncViewOnly();
+  syncDebugModes();
 }
 
 function syncViewOnly(): void {
@@ -943,7 +965,7 @@ export function restoreUi(): void {
   Emblems.setShape(emblems.shape);
   changeTooltipSize(ui.tooltipSize);
 
-  optionInput("uiSize").max = String(maxUiSize());
+  optionInput("uiSize").setAttribute("max", String(maxUiSize()));
   changeUiSize(ui.size ?? defaultUiSize());
 
   changeDialogsTheme(ui.themeColor, ui.transparency);

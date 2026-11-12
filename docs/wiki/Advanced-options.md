@@ -60,7 +60,15 @@ To get a heightmap image that fits a square tile grid one cell per tile, generat
 
 These apply immediately and are kept in the browser:
 
-- **Autosave interval**: how often, in minutes, the map is saved to browser storage. 0 turns autosave off.
-- **On load**: generate a new map or open the last saved one when the page opens.
+- **Autosave interval**: how often, in minutes, the map is saved to browser storage. 0 turns autosave off. The five latest autosaves are kept, and the last autosave of a previous map is the last to go.
+- **On load**: generate a new map or open the most recent browser save when the page opens.
 - **Speaker voice**: the voice used by the speaker buttons next to names. The speaker icon plays a test phrase.
 - **Emblem shape**: the default coat of arms shield shape. Single emblems can still be changed in the Emblem Editor.
+
+## Debugging
+
+Diagnostics for checking how the generator works, kept in the browser. They may show more in dialogs or the browser console and record extra data while you work, but they never change what is saved in the `.map` file, so turning them on is always safe.
+
+- **Economy**: the Economy Overview of a burg lists every step of its production run instead of a summary: what it weighed before making each good, every market it could have bought each good from with the price at its door, and the goods that could cover each of its needs. It records from the next production run (Tools → Regenerate → Economy), which runs about three times slower while it is on.
+- **Temperature**: logs sea temperatures by latitude to the browser console when the climate is generated.
+- **Cloud storage**: logs cloud storage responses to the browser console.
